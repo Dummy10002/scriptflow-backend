@@ -1,0 +1,30 @@
+{
+  "name": "scriptflow-backend",
+  "version": "1.0.0",
+  "description": "AI Reel Script Backend for ManyChat",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "*",
+    "better-sqlite3": "*",
+    "cors": "*",
+    "dotenv": "*",
+    "express": "*",
+    "fluent-ffmpeg": "*",
+    "yt-dlp-exec": "*",
+    "zod": "*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "*",
+    "@types/express": "*",
+    "@types/fluent-ffmpeg": "*",
+    "@types/node": "*",
+    "ts-node": "*",
+    "typescript": "*"
+  }
+}
