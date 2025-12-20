@@ -34,6 +34,15 @@ export function createServer() {
   // Health Check
   app.get('/health', (req, res) => res.send('OK'));
 
+  // 404 Handler - Must be after routes but before error handler
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    res.status(404).json({
+      status: 'error',
+      code: 'NOT_FOUND',
+      message: `Endpoint not found: ${req.method} ${req.originalUrl}`
+    });
+  });
+
   // Central Error Handler
   app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     logger.error('Unhandled server error', err);

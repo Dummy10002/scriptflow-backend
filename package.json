@@ -10,16 +10,20 @@
   },
   "dependencies": {
     "@google/generative-ai": "*",
+    "axios": "^1.13.2",
     "better-sqlite3": "*",
     "cors": "*",
     "dotenv": "*",
     "express": "*",
+    "fluent-ffmpeg": "^2.1.3",
+    "yt-dlp-exec": "^1.0.2",
     "zod": "*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "*",
     "@types/express": "*",
+    "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "*",
     "ts-node": "*",
     "typescript": "*"

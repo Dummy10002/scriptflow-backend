@@ -3,43 +3,40 @@ import { logger } from '../utils/logger';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-export async function generateScript(userIdea: string): Promise<string> {
+export async function generateScript(userIdea: string, transcript: string | null): Promise<string> {
   const model = genAI.getGenerativeModel({ 
-    model: "gemini-1.5-flash",
-    systemInstruction: `You are a professional Instagram Reel scriptwriter.
-
-You write short-form scripts (30–45 seconds) that are:
-- Hook-driven
-- Conversational
-- Easy to perform
-- Optimized for Instagram Reels
-
-Rules:
-- No hashtags
-- No emojis
-- No markdown
-- Simple spoken English`
+    // Recommended: Use gemini-1.5-flash or gemini-2.0-flash
+    model: "gemini-2.5-flash", 
+    systemInstruction: `You are a World-Class Creative Strategist who follows the "Steal Like an Artist" philosophy. 
+    
+    Your goal is to perform a "Surgical Good Theft": 
+    1. Analyze the DNA of a reference video (its pacing, psychological hooks, and logical structure).
+    2. Emulate the *thinking* behind the reference, not the words.
+    3. Remix that structure into a new script based on the user's specific concept.
+    
+    Rules:
+    - No hashtags, no emojis, and no markdown.
+    - Style: High-status, punchy, and calculated.
+    - Tone: Pivot from a surface-level hook to a deep strategic truth.
+    - Vocabulary: Use technical authority words (e.g., if UI/UX, use terms like 'visual hierarchy', '8pt grid', 'cognitive friction').`
   });
 
-  const prompt = `Create an Instagram Reel script based on this idea:
+  const prompt = `
+  Apply the "Steal Like an Artist" framework to generate a new script.
 
-IDEA:
-${userIdea}
+  REFERENCE DNA (The Source to Steal From):
+  "${transcript ? transcript : "No transcript provided. Use an intense, strategic tone."}"
 
-CONTEXT:
-This script should feel inspired by an existing reel, but it must be original.
+  NEW CONCEPT (The Topic to Apply the DNA to):
+  "${userIdea}"
 
-STRUCTURE:
-- Strong hook in the first 2–3 seconds
-- Clear, punchy core message
-- Simple call-to-action at the end
+  INSTRUCTIONS:
+  1. DECONSTRUCT: Identify the reference video's rhythm. If it starts with a character obsession or a "Do you know why..." hook, use that same opening logic.
+  2. TRANSFORMATION: Apply that logic to the NEW CONCEPT. Do not mention the characters or objects from the reference; only steal the "Logical Leap" (the 'If/Then' statement).
+  3. PACING: Match the timing of the reference (roughly 30–45 seconds).
+  4. PROOF: Use modern authority figures or industry standards relevant to the NEW CONCEPT to prove the point.
 
-CONSTRAINTS:
-- 30–45 seconds total
-- Readable in Instagram DMs
-- Short lines
-
-Return only the script text.`;
+  Return ONLY the final spoken script text.`;
 
   try {
     const result = await model.generateContent(prompt);
@@ -47,7 +44,6 @@ Return only the script text.`;
     return script.trim();
   } catch (error) {
     logger.error('Script generation failed', error);
-    // Rethrow to let the controller handle the fallback
     throw error;
   }
 }
