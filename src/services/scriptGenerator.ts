@@ -3,42 +3,51 @@ import { logger } from '../utils/logger';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-export async function generateScript(userIdea: string, transcript: string | null): Promise<string> {
+export async function generateScript(userIdea: string): Promise<string> {
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-1.5-flash",
+    systemInstruction: `You are a professional Instagram Reel scriptwriter.
+
+You write short-form scripts (30–45 seconds) that are:
+- Hook-driven
+- Conversational
+- Easy to perform
+- Optimized for Instagram Reels
+
+Rules:
+- No hashtags
+- No emojis
+- No markdown
+- Simple spoken English`
+  });
+
+  const prompt = `Create an Instagram Reel script based on this idea:
+
+IDEA:
+${userIdea}
+
+CONTEXT:
+This script should feel inspired by an existing reel, but it must be original.
+
+STRUCTURE:
+- Strong hook in the first 2–3 seconds
+- Clear, punchy core message
+- Simple call-to-action at the end
+
+CONSTRAINTS:
+- 30–45 seconds total
+- Readable in Instagram DMs
+- Short lines
+
+Return only the script text.`;
+
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const prompt = `
-You are an expert Instagram Reel scriptwriter.
-Generate a script based on the following:
-
-USER IDEA: "${userIdea}"
-ORIGINAL REEL TRANSCRIPT (for structure inspiration): "${transcript || 'N/A'}"
-
-REQUIREMENTS:
-1. Valid Viral Structure: Hook -> Value/Story -> Call to action.
-2. Tone: Engaging, concise, punchy.
-3. Length: ~30-60 seconds.
-4. Output Format (Strictly enforce this):
-
-HOOK
-[The hook script line]
-
-BODY
-[The main content script]
-
-CTA
-[The call to action]
-
-Do NOT use Markdown formatting (like **bold** or ## headers).
-Do NOT include emojis.
-Do NOT include instructions like "Here is your script". Just the script.
-    `;
-
     const result = await model.generateContent(prompt);
     const script = result.response.text();
     return script.trim();
   } catch (error) {
     logger.error('Script generation failed', error);
-    throw new Error('Failed to generate script');
+    // Rethrow to let the controller handle the fallback
+    throw error;
   }
 }

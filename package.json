@@ -14,15 +14,12 @@
     "cors": "*",
     "dotenv": "*",
     "express": "*",
-    "fluent-ffmpeg": "*",
-    "yt-dlp-exec": "*",
     "zod": "*"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "*",
     "@types/express": "*",
-    "@types/fluent-ffmpeg": "*",
     "@types/node": "*",
     "ts-node": "*",
     "typescript": "*"

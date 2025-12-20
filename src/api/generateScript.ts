@@ -3,16 +3,10 @@ import crypto from 'crypto';
 import { scriptGenerationSchema } from '../validators/requestValidator';
 import { generateRequestHash } from '../utils/hash';
 import { getScriptByHash, saveScript } from '../db/sqlite';
-import { downloadReel } from '../services/reelDownloader';
-import { extractAudio } from '../services/audioExtractor';
-import { transcribeAudio } from '../services/transcription';
 import { generateScript } from '../services/scriptGenerator';
-import { cleanupFiles } from '../services/cleanup';
 import { logger } from '../utils/logger';
 
 export const generateScriptHandler = async (req: Request, res: Response) => {
-  let videoPath: string | null = null;
-  let audioPath: string | null = null;
   const requestId = crypto.randomUUID();
 
   try {
@@ -36,51 +30,59 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
     if (cachedScript) {
       logger.info(`Cache hit: ${requestHash}`);
       return res.json({
-        status: 'success',
         script: cachedScript.script_text
       });
     }
 
     logger.info(`Processing new request: ${requestId}`);
 
-    // 3. Download Reel
-    // This is the most likely step to fail or timeout
-    videoPath = await downloadReel(reel_url, requestId);
+    // 3. AI Script Generation (Synchronous Path)
+    // We treat reel_url as context only, skipping download/transcription
+    let script: string;
+    try {
+        // Enforce 8s timeout as per PRD Section 10
+        const timeoutPromise = new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error('AI_TIMEOUT')), 8000);
+        });
 
-    // 4. Extract Audio
-    audioPath = await extractAudio(videoPath, requestId);
+        script = await Promise.race([
+            generateScript(user_idea),
+            timeoutPromise
+        ]);
+    } catch (error) {
+        logger.error(`AI generation failed for ${requestId} (Error: ${error instanceof Error ? error.message : error}), returning fallback`);
+        script = `I couldn’t fully analyze the reel, but here’s a script you can use based on your idea:
 
-    // 5. Transcribe
-    const transcript = await transcribeAudio(audioPath);
-    logger.info(`Transcription complete (length: ${transcript?.length || 0})`);
+HOOK
+(Start with a strong statement about ${user_idea})
 
-    // 6. Generate Script
-    const script = await generateScript(user_idea, transcript);
+BODY
+(Explain your main point about ${user_idea})
 
-    // 7. Save to DB
+CTA
+(Tell them to comment or follow)`;
+    }
+
+    // 4. Save to DB
+    // We save even fallbacks to respect idempotency for this input combo
     saveScript(requestHash, manychat_user_id, reel_url, user_idea, script);
 
-    // 8. Respond
+    // 5. Respond
+    // Strict contract: { script: "..." }
     return res.json({
-      status: 'success',
       script
     });
 
   } catch (error: any) {
-    logger.error(`Request ${requestId} failed`, error);
+    // This catch block handles unexpected errors outside of AI generation (e.g. DB errors)
+    // Even here, we try to return a valid JSON script response if possible, 
+    // but if it's a structural error (like DB failure), we might default to a safe fail.
+    // PRD says "Almost never fail".
+    logger.error(`Critical request failure ${requestId}`, error);
     
-    const statusCode = error.message === 'Video too long' ? 400 : 500;
-    const errorCode = error.message === 'Video too long' ? 'VIDEO_TOO_LONG' : 'PROCESSING_FAILED';
-    
-    if (!res.headersSent) {
-      return res.status(statusCode).json({
-        status: 'error',
-        code: errorCode,
-        message: error.message || 'Unable to process this reel'
-      });
-    }
-  } finally {
-    // 9. Cleanup
-    cleanupFiles([videoPath, audioPath]);
+    // Last resort fallback
+    return res.json({
+        script: "I'm having trouble connecting right now, but please try recording your idea directly!"
+    });
   }
 };
