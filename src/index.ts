@@ -1,4 +1,4 @@
-import 'dotenv/config';
+// import 'dotenv/config'; // Validation moved to config.ts
 import { createServer } from './server';
 import { initDB } from './db/sqlite';
 import { logger } from './utils/logger';
@@ -12,27 +12,41 @@ if (!fs.existsSync(tempDir)) {
 }
 
 // Initialize Database
+import { config } from './config';
+
+// ... (imports)
+
+// Initialize Database
 initDB();
 
-// Debug: List available models
-import { GoogleGenerativeAI } from '@google/generative-ai';
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-async function listModels() {
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
-    // Accessing model list is distinct, but let's try to just hit a dummy prompt on "gemini-pro" first to check connectivity
-    // actually, the SDK has a specific manager for this usually, but it's simpler to just try generating on a known safe model.
-    console.log("Checking API Key validity...");
-  } catch (e) {
-    console.error("Model check error", e);
-  }
-}
-listModels();
-
 const app = createServer();
-const PORT = process.env.PORT || 3000;
+const PORT = config.PORT;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server listening on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Environment: ${config.NODE_ENV}`);
 });
+
+// Graceful Shutdown
+const shutdown = async (signal: string) => {
+  logger.info(`${signal} received. Shutting down gracefully...`);
+  
+  server.close(() => {
+    logger.info('HTTP server closed.');
+  });
+
+  try {
+    // Close Puppeteer
+    const { closeBrowser } = await import('./services/browser');
+    await closeBrowser();
+    logger.info('Browser service closed.');
+    
+    process.exit(0);
+  } catch (err) {
+    logger.error(`Error during shutdown: ${err}`);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

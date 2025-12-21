@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import pLimit from 'p-limit';
 import { scriptGenerationSchema } from '../validators/requestValidator';
 import { generateRequestHash } from '../utils/hash';
 import { getScriptByHash, saveScript } from '../db/sqlite';
@@ -12,6 +13,7 @@ import { transcribeAudio } from '../services/transcription';
 import { generateScript } from '../services/scriptGenerator';
 import { cleanupFiles } from '../services/cleanup';
 import { sendToManyChat } from '../services/manychat';
+import { generateScriptImage } from '../utils/imageGenerator';
 
 /**
  * ASYNC HANDLER (Option B)
@@ -56,9 +58,14 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
     message: 'Analyzing your reel... I will send the script in a new message shortly!'
   });
 
-  // 4. Background Processing
-  processAsyncScript(requestId, requestHash, manychat_user_id, reel_url, user_idea);
+ // 4. Background Processing
+  // Use p-limit to restrict concurrency
+  limit(() => processAsyncScript(requestId, requestHash, manychat_user_id, reel_url, user_idea));
 };
+
+// ... existing code ...
+
+const limit = pLimit(2); // Limit to 2 concurrent jobs to prevent OOM
 
 // Background Worker
 async function processAsyncScript(
@@ -95,10 +102,15 @@ async function processAsyncScript(
     // F. Send to ManyChat
     logger.info(`[${requestId}] Generated script: ${script}`);
     
+    // Convert to Image
+    logger.info(`[${requestId}] Generating image from script...`);
+    const imageUrl = await generateScriptImage(script);
+
+    // Send Image URL to ManyChat
     await sendToManyChat({
       subscriber_id: userId,
-      field_name: 'AI_Script_Result', // Must match ManyChat Custom Field
-      field_value: script
+      field_name: 'script_image_url', // Changed from text field to image URL field
+      field_value: imageUrl
     });
 
   } catch (error: any) {

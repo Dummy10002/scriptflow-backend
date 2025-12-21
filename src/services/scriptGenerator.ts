@@ -31,12 +31,23 @@ export async function generateScript(userIdea: string, transcript: string | null
   "${userIdea}"
 
   INSTRUCTIONS:
-  1. DECONSTRUCT: Identify the reference video's rhythm. If it starts with a character obsession or a "Do you know why..." hook, use that same opening logic.
-  2. TRANSFORMATION: Apply that logic to the NEW CONCEPT. Do not mention the characters or objects from the reference; only steal the "Logical Leap" (the 'If/Then' statement).
-  3. PACING: Match the timing of the reference (roughly 30–45 seconds).
-  4. PROOF: Use modern authority figures or industry standards relevant to the NEW CONCEPT to prove the point.
+  1. **LINGUISTIC STYLE TRANSFER**: Detect the exact language mix of the transcript. Output must match it.
+  
+  2. STRUCTURE: Your output MUST be strictly structured into these three sections with specific headers:
+     
+     [HOOK]
+     (The opening line. High status, punchy, or a "Do you know..." hook. Max 1-2 sentences.)
 
-  Return ONLY the final spoken script text.`;
+     [BODY]
+     (The main strategic insight or logical leap. Apply the "Steal Like an Artist" framework here. Max 3-4 sentences.)
+
+     [CTA]
+     (A short, non-cringe call to action. e.g. "Comment 'Scale' for details" or "Follow for more".)
+     
+  3. DECONSTRUCT & TRANSFORMATION: Apply the reference video's logic to the NEW CONCEPT.
+  4. PACING: Keep it tight (30-45 seconds spoken).
+
+  Return ONLY the final spoken script text with the headers. Do not add markdown formatting like **bold** or *italic*.`;
 
   try {
     const result = await model.generateContent(prompt);

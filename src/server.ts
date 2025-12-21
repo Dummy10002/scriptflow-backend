@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { generateScriptHandler } from './api/generateScript';
 import { logger } from './utils/logger';
+import { config } from './config';
 
 export function createServer() {
   const app = express();
