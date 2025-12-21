@@ -37,12 +37,12 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     await page.setContent(`
         <html>
           <head>
-            <link href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400&display=swap" rel="stylesheet">
+            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
             <style>
               body {
                 width: 1080px;
                 padding: 80px;
-                font-family: 'Satoshi', sans-serif;
+                font-family: 'Poppins', sans-serif;
                 background: #F8F9FA;
                 color: #111;
                 display: flex;
@@ -56,14 +56,14 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
               }
               .hook {
                 font-size: 36px;
-                font-weight: 800; /* Black/Bold */
+                font-weight: 700; /* Bold */
                 line-height: 1.3;
                 color: #000;
                 white-space: pre-wrap;
               }
               .body {
                 font-size: 26px;
-                font-weight: 500; /* Regular/Medium */
+                font-weight: 400; /* Regular */
                 line-height: 1.6;
                 color: #333;
                 white-space: pre-wrap;
@@ -77,7 +77,7 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
               }
               .cta {
                 font-size: 28px;
-                font-weight: 800;
+                font-weight: 700;
                 color: #000;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
