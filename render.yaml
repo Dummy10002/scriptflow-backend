@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: scriptflow-backend
+    runtime: docker
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: IMGBB_API_KEY
+        sync: false
+      - key: MANYCHAT_API_KEY
+        sync: false
