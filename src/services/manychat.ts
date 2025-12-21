@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { config } from '../config';
 
 export interface ManyChatPayload {
   subscriber_id: string;
@@ -17,12 +18,18 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
   }
 
   try {
-    const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomFieldByName';
+    // 1. Set the Custom Field by ID (Most Reliable)
+    // Ensure subscriber_id is an integer if required by the API
+    const subscriberIdInt = parseInt(payload.subscriber_id, 10);
+
+    const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
     
-    // 1. Set the Custom Field (Result)
+    // Use the field ID explicitly from config if available, otherwise fallback to payload name
+    const fieldId = config.MANYCHAT_SCRIPT_FIELD_ID || payload.field_name;
+
     await axios.post(setFieldUrl, {
-      subscriber_id: payload.subscriber_id,
-      field_name: payload.field_name,
+      subscriber_id: subscriberIdInt,
+      field_id: parseInt(fieldId, 10), // Ensure field_id is also an integer
       field_value: payload.field_value
     }, {
       headers: {
