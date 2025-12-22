@@ -109,7 +109,6 @@ async function processAsyncScript(
     // Send Image URL to ManyChat
     await sendToManyChat({
       subscriber_id: userId,
-      field_name: 'script_image_url', // Changed from text field to image URL field
       field_value: imageUrl
     });
 
@@ -119,23 +118,11 @@ async function processAsyncScript(
         console.log('ManyChat Error Details:', JSON.stringify(error.response.data, null, 2));
     }
     
-    // Fallback? Yes, send a fallback script via ManyChat API
-    const fallbackScript = `I couldn't watch that specific reel, but here is a script based on your idea:
-    
-HOOK
-(Start with a strong statement about ${idea})
+    // Fallback: We log the error but do not send fallback text to ManyChat
+    // because the current configuration strictly enforces sending an Image URL
+    // to a specific Custom Field ID. Sending text would fail or be incorrect.
 
-BODY
-(Explain your main point about ${idea})
 
-CTA
-(Tell them to comment or follow)`;
-
-    await sendToManyChat({
-      subscriber_id: userId,
-      field_name: 'AI_Script_Result',
-      field_value: fallbackScript
-    });
 
   } finally {
     // Cleanup
