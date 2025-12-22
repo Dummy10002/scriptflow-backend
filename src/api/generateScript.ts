@@ -34,8 +34,8 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
     });
   }
 
-  const { manychat_user_id, reel_url, user_idea } = parseResult.data;
-  const requestHash = generateRequestHash(manychat_user_id, reel_url, user_idea);
+  const { subscriber_id, reel_url, user_idea } = parseResult.data;
+  const requestHash = generateRequestHash(subscriber_id, reel_url, user_idea);
 
   // 2. Idempotency Check (Fast Path)
   const cachedScript = getScriptByHash(requestHash);
@@ -60,7 +60,7 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
 
  // 4. Background Processing
   // Use p-limit to restrict concurrency
-  limit(() => processAsyncScript(requestId, requestHash, manychat_user_id, reel_url, user_idea));
+  limit(() => processAsyncScript(requestId, requestHash, subscriber_id, reel_url, user_idea));
 };
 
 // ... existing code ...
