@@ -14,3 +14,9 @@ services:
         sync: false
       - key: MANYCHAT_API_KEY
         sync: false
+      - key: MONGO_URI
+        sync: false
+      - key: API_SECRET_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false

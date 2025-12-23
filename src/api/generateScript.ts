@@ -1,25 +1,11 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import pLimit from 'p-limit';
 import { scriptGenerationSchema } from '../validators/requestValidator';
 import { generateRequestHash } from '../utils/hash';
-import { getScriptByHash, saveScript } from '../db/sqlite';
+import { Script } from '../models/Script'; // Use Mongoose model
 import { logger } from '../utils/logger';
+import { scriptQueue } from '../queue/producer';
 
-// Services
-import { downloadReel } from '../services/reelDownloader';
-import { extractAudio } from '../services/audioExtractor';
-import { transcribeAudio } from '../services/transcription';
-import { generateScript } from '../services/scriptGenerator';
-import { cleanupFiles } from '../services/cleanup';
-import { sendToManyChat } from '../services/manychat';
-import { generateScriptImage } from '../utils/imageGenerator';
-
-/**
- * ASYNC HANDLER (Option B)
- * Returns immediate response to ManyChat to prevent timeout.
- * Processes video in background and sends result via ManyChat API.
- */
 export const generateScriptHandler = async (req: Request, res: Response) => {
   const requestId = crypto.randomUUID();
 
@@ -37,95 +23,44 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
   const { subscriber_id, reel_url, user_idea } = parseResult.data;
   const requestHash = generateRequestHash(subscriber_id, reel_url, user_idea);
 
-  // 2. Idempotency Check (Fast Path)
-  const cachedScript = getScriptByHash(requestHash);
-  if (cachedScript) {
-    logger.info(`Cache hit: ${requestHash}`);
-    // If cached, we can return it immediately or send it async. 
-    // For consistency with the Flow, let's return it immediately IF it's fast enough, 
-    // but the contract is now "I'll get back to you".
-    // Actually, if we have it, just return it. ManyChat can handle a fast JSON response.
-    return res.json({
-      script: cachedScript.script_text
-    });
-  }
-
-  // 3. Immediate Response (prevent timeout)
-  // We return a "Processing" signal. ManyChat should be configured to ignore this JSON 
-  // or mapped to a standard "We are working on it" message.
-  res.json({
-    status: 'queued',
-    message: 'Analyzing your reel... I will send the script in a new message shortly!'
-  });
-
- // 4. Background Processing
-  // Use p-limit to restrict concurrency
-  limit(() => processAsyncScript(requestId, requestHash, subscriber_id, reel_url, user_idea));
-};
-
-// ... existing code ...
-
-const limit = pLimit(2); // Limit to 2 concurrent jobs to prevent OOM
-
-// Background Worker
-async function processAsyncScript(
-  requestId: string, 
-  requestHash: string,
-  userId: string, 
-  url: string, 
-  idea: string
-) {
-  logger.info(`[${requestId}] Starting background analysis`);
-  let videoPath: string | null = null;
-  let audioPath: string | null = null;
-
+  // 2. Idempotency Check (Fast Path from MongoDB)
   try {
-    // A. Download
-    videoPath = await downloadReel(url, requestId);
+    const cachedScript = await Script.findOne({ 'meta.requestHash': requestHash });
     
-    // B. Extract
-    audioPath = await extractAudio(videoPath, requestId);
-
-    // C. Transcribe
-    const transcript = await transcribeAudio(audioPath);
-    logger.info(`[${requestId}] Transcription length: ${transcript?.length || 0}`);
-    if (transcript) {
-        logger.info(`[${requestId}] Transcription text: ${transcript}`);
+    if (cachedScript) {
+      logger.info(`Cache hit: ${requestHash}`);
+      return res.json({
+        script: cachedScript.finalOutput.scriptText
+      });
     }
+  } catch (err) {
+    logger.error('Error checking cache', err);
+    // Continue even if cache check fails? safer to continue
+  }
 
-    // D. Generate
-    const script = await generateScript(idea, transcript);
-
-    // E. Save
-    saveScript(requestHash, userId, url, idea, script);
-
-    // F. Send to ManyChat
-    logger.info(`[${requestId}] Generated script: ${script}`);
-    
-    // Convert to Image
-    logger.info(`[${requestId}] Generating image from script...`);
-    const imageUrl = await generateScriptImage(script);
-
-    // Send Image URL to ManyChat
-    await sendToManyChat({
-      subscriber_id: userId,
-      field_value: imageUrl
+  // 3. Add to Queue
+  try {
+    await scriptQueue.add('generate-script', {
+      requestId,
+      requestHash,
+      userId: subscriber_id,
+      url: reel_url,
+      idea: user_idea
     });
 
-  } catch (error: any) {
-    logger.error(`[${requestId}] Background processing failed`, error);
-    if (error.response && error.response.data) {
-        console.log('ManyChat Error Details:', JSON.stringify(error.response.data, null, 2));
-    }
-    
-    // Fallback: We log the error but do not send fallback text to ManyChat
-    // because the current configuration strictly enforces sending an Image URL
-    // to a specific Custom Field ID. Sending text would fail or be incorrect.
+    logger.info(`[${requestId}] Job added to queue`);
 
-
-
-  } finally {
-    // Cleanup
-    cleanupFiles([videoPath, audioPath]);
+    // 4. Immediate Response
+    res.json({
+      status: 'queued',
+      message: 'Analyzing your reel... I will send the script in a new message shortly!'
+    });
+  } catch (error) {
+    logger.error('Failed to add job to queue', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'QUEUE_ERROR',
+      message: 'Failed to queue request'
+    });
   }
-}
+};

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  # 1. Main Application
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=development
+      # Use internal docker dns names
+      - MONGO_URI=mongodb://mongo:27017/scriptflow
+      - REDIS_URL=redis://redis:6379
+      # Keys loaded from local .env
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - IMGBB_API_KEY=${IMGBB_API_KEY}
+      - MANYCHAT_API_KEY=${MANYCHAT_API_KEY}
+      - API_SECRET_KEY=${API_SECRET_KEY}
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      # Persist temp folder for debug (optional)
+      - ./temp:/app/temp
+
+  # 2. Database
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27017:27017" # Exposed to host for internal tools
+    volumes:
+      - mongo-data:/data/db
+
+  # 3. Queue Broker
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379" # Exposed to host for debugging
+    volumes:
+      - redis-data:/data
+
+volumes:
+  mongo-data:
+  redis-data:

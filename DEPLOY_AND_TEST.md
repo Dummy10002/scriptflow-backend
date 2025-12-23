@@ -1,69 +1,90 @@
-# Deploying ScriptFlow to Render
+# Deploy & Test Guide (Docker + Redis Edition)
 
-Since this backend requires system-level dependencies (`yt-dlp` and `ffmpeg`) that are not available in standard Node.js environments, we will deploy using **Docker**.
+This guide covers how to deploy the **Full Stack** application (Web + Worker + Database + Queue) using Docker.
 
 ## Prerequisites
-1. Push this code to a **GitHub** or **GitLab** repository.
-2. Have a [Render.com](https://render.com) account.
-3. Have your `GEMINI_API_KEY` ready.
+1.  **System**: Docker and Docker Compose installed.
+2.  **API Keys**: Google Gemini API Key, ImgBB API Key, API Secret Key (Generic).
 
 ---
 
-## Step 1: Create a New Web Service
-1. Log in to your Render Dashboard.
-2. Click **New +** and select **Web Service**.
-3. Connect your GitHub/GitLab account and select the repository you just pushed (`scriptflow-backend`).
+## Part 1: Local Testing (The "One-Command" Way)
 
-## Step 2: Configure the Service
-Render will detect the `Dockerfile` automatically. Use these settings:
+We use `docker-compose` to run the entire backend locally.
 
-*   **Name**: `scriptflow-backend` (or whatever you like)
-*   **Region**: Closest to you (e.g., Oregon, Frankfurt)
-*   **Runtime**: **Docker** (This is critical!)
-*   **Instance Type**: **Free** (This works for low volume, but standard is recommended for faster video processing).
-
-## Step 3: Environment Variables
-Scroll down to the **Environment Variables** section and add:
-
-| Key | Value |
-| :--- | :--- |
-| `GEMINI_API_KEY` | `Your_Actual_Gemini_API_Key_Here` |
-| `PORT` | `3000` |
-
-## Step 4: Deploy
-1. Click **Create Web Service**.
-2. Render will start building the Docker image. This might take 5-10 minutes because it needs to install FFmpeg and Python.
-3. Once completed, you will see a green **"Live"** badge and a URL (e.g., `https://scriptflow-backend.onrender.com`).
-
-**Copy this URL. You will need it for ManyChat.**
-
----
-
-## Step 5: How to Test (Before ManyChat)
-
-You can test the live server using `curl` (Terminal) or a tool like Postman.
-
-### Using Curl
-Replace `YOUR_RENDER_URL` with the URL you copied above.
-
-```bash
-curl -X POST https://YOUR_RENDER_URL/api/v1/script/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "manychat_user_id": "test_user_1",
-    "reel_url": "https://www.instagram.com/reel/Cm4gXy...",
-    "user_idea": "Focus on the coding tips in this video"
-  }'
+### 1. Setup Environment
+Create a `.env` file in the root directory:
+```env
+PORT=3000
+NODE_ENV=development
+# Keys
+GEMINI_API_KEY=your_gemini_key
+IMGBB_API_KEY=your_img_bb_key
+MANYCHAT_API_KEY=optional_locally
+API_SECRET_KEY=mySuperSecretKey123
+# Connections (Docker Internal Hostnames)
+MONGO_URI=mongodb://mongo:27017/scriptflow
+REDIS_URL=redis://redis:6379
 ```
 
-### Expected Response
+### 2. Start the System
+Open your terminal and run:
+```bash
+docker-compose up --build
+```
+You will see 3 services starting: `app`, `mongo`, and `redis`.
+
+### 3. Send a Test Request (Verified)
+Open another terminal window (or Postman) and run:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/script/generate \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: mySuperSecretKey123" \
+  -d '{
+    "subscriber_id": "test_user_1",
+    "reel_url": "https://www.instagram.com/reel/Cm4gExample...",
+    "user_idea": "Make this funny"
+  }'
+```
+**Expected Response**:
 ```json
 {
-  "status": "success",
-  "script": "HOOK\nHere is the hook...\n\nBODY\nHere is the body...\n\nCTA\nFollow for more!"
+  "status": "queued",
+  "message": "Analyzing your reel... I will send the script in a new message shortly!"
 }
 ```
 
-### Troubleshooting
-*   **504 Gateway Timeout**: The video was too long or the server is too slow (Free tier limitation). Try a shorter Reel.
-*   **500 Error**: Check the **Logs** tab in Render to see if `yt-dlp` failed or if the API Key is invalid.
+---
+
+## Part 2: Deployment on Render
+
+To deploy this architecture on Render, we need 3 services:
+1.  **Web Service (Docker)**: The Node.js App.
+2.  **Redis (Instance)**: The Queue.
+3.  **MongoDB (Instance)**: The Database.
+
+### Step 1: Create Redis
+1.  New -> **Redis**.
+2.  Name: `scriptflow-redis`.
+3.  Copy the **Internal Connection URL** (e.g., `redis://red-c...:6379`).
+
+### Step 2: Create MongoDB (Atlas or Render)
+1.  If using **MongoDB Atlas**, get your connection string.
+2.  If mostly testing, you can try Render's managed PostgreSQL (not Mongo) or spin up a Mongo Docker, but Atlas Free Tier is best for Mongo.
+
+### Step 3: Create Web Service
+1.  New -> **Web Service**.
+2.  Connect Repo -> Select `scriptflow-backend`.
+3.  Runtime: **Docker**.
+4.  **Environment Variables**:
+    *   `GEMINI_API_KEY`: ...
+    *   `IMGBB_API_KEY`: ...
+    *   `API_SECRET_KEY`: (Create a strong password)
+    *   `REDIS_URL`: (Paste from Step 1)
+    *   `MONGO_URI`: (Paste from Step 2)
+    *   `PUPPETEER_EXECUTABLE_PATH`: `/usr/bin/chromium` (Already preset in Dockerfile but good to confirm)
+
+### Step 4: Verify
+1.  Deploy.
+2.  Check Logs. You should see "Connected to MongoDB" and "Script Generation Queue initialized".

@@ -1,6 +1,6 @@
 // import 'dotenv/config'; // Validation moved to config.ts
 import { createServer } from './server';
-import { initDB } from './db/sqlite';
+import { connectDB } from './db/mongo';
 import { logger } from './utils/logger';
 import fs from 'fs';
 import path from 'path';
@@ -17,7 +17,12 @@ import { config } from './config';
 // ... (imports)
 
 // Initialize Database
-initDB();
+connectDB();
+
+// Initialize Worker (for single-instance deployment)
+// In a scaled environment, this would run in a separate process
+import { setupWorker } from './queue/worker';
+setupWorker();
 
 const app = createServer();
 const PORT = config.PORT;
