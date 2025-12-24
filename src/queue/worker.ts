@@ -2,8 +2,7 @@ import { Worker, Job } from 'bullmq';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { downloadReel } from '../services/reelDownloader';
-import { extractAudio } from '../services/audioExtractor';
-import { transcribeAudio } from '../services/transcription';
+
 import { generateScript } from '../services/scriptGenerator';
 import { cleanupFiles } from '../services/cleanup';
 import { sendToManyChat } from '../services/manychat';
@@ -30,26 +29,20 @@ const workerHandler = async (job: Job<ScriptJobData>) => {
     // A. Download
     videoPath = await downloadReel(url, requestId);
     
-    // B. Extract
-    audioPath = await extractAudio(videoPath, requestId);
+    // B. Analyze & Generate (Vision Mode)
+    logger.info(`[${requestId}] Video downloaded at ${videoPath}. Sending to Gemini Vision...`);
+    const { script: scriptText, visualAnalysis } = await generateScript(idea, videoPath, userId);
 
-    // C. Transcribe
-    const transcript = await transcribeAudio(audioPath);
-    logger.info(`[${requestId}] Transcription length: ${transcript?.length || 0}`);
-
-    // D. Generate
-    const scriptText = await generateScript(idea, transcript);
-
-    // E. Save to MongoDB (Optimized Schema)
-    // Create new Script record
+    // C. Save to MongoDB (Optimized Schema)
     await Script.create({
       originalInput: {
         reelUrl: url,
         userIdea: idea
       },
       aiGeneration: {
-        promptUsed: `Generate a script for: ${idea}. Transcript: ${transcript?.substring(0, 100)}...`, // Approximate prompt log
-        modelUsed: 'gemini-1.5-flash',
+        promptUsed: `Generate a script for: ${idea}. [Video Analysis Mode]`, // Log that vision was used
+        modelUsed: 'gemini-2.5-flash-lite',
+        visualAnalysis: visualAnalysis,
         rawOutput: scriptText
       },
       finalOutput: {
@@ -58,7 +51,7 @@ const workerHandler = async (job: Job<ScriptJobData>) => {
       meta: {
         manychatUserId: userId,
         requestHash: requestHash,
-        ipAddress: 'worker' // IP not available in worker context easily, or pass from job data
+        ipAddress: 'worker'
       }
     });
 
@@ -81,7 +74,7 @@ const workerHandler = async (job: Job<ScriptJobData>) => {
     throw error; // Rethrow to mark job as failed in BullMQ
   } finally {
     // Cleanup
-    cleanupFiles([videoPath, audioPath]);
+    cleanupFiles([videoPath]);
   }
 };
 

@@ -10,6 +10,7 @@ export interface IScript extends Document {
   aiGeneration: {
     promptUsed: string;
     modelUsed: string;
+    visualAnalysis?: string;
     rawOutput: string;
   };
   finalOutput: {
@@ -37,6 +38,7 @@ const ScriptSchema = new Schema({
   aiGeneration: {
     promptUsed: { type: String, required: true },
     modelUsed: { type: String, required: true },
+    visualAnalysis: { type: String }, // captured visual cues
     rawOutput: { type: String, required: true }
   },
   finalOutput: {

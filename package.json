@@ -23,6 +23,9 @@
     "mongoose": "^9.0.2",
     "node-html-to-image": "^5.0.0",
     "p-limit": "^7.2.0",
+    "satori": "^0.18.3",
+    "satori-html": "^0.3.2",
+    "sharp": "^0.34.5",
     "yt-dlp-exec": "^1.0.2",
     "zod": "*"
   },

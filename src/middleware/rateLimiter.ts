@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 
 // Configuration
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_REQUESTS = 20;
+const MAX_REQUESTS = 100;
 
 export const rateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   try {

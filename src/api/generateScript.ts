@@ -28,10 +28,11 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
     const cachedScript = await Script.findOne({ 'meta.requestHash': requestHash });
     
     if (cachedScript) {
-      logger.info(`Cache hit: ${requestHash}`);
-      return res.json({
-        script: cachedScript.finalOutput.scriptText
-      });
+      logger.info(`Cache hit: ${requestHash}. INVALIDATING CACHE for testing purposes.`);
+      // FORCE REGENERATION: Delete the old record so we can run the flow again and deliver the message
+      await Script.deleteOne({ _id: cachedScript._id });
+      // Proceed to queue...
+      // return res.json(...) // DISABLED
     }
   } catch (err) {
     logger.error('Error checking cache', err);

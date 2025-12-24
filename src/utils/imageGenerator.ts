@@ -2,150 +2,170 @@ import axios from 'axios';
 import FormData from 'form-data';
 import { logger } from './logger';
 import { config } from '../config';
-import { getBrowser } from '../services/browser';
 import { Readable } from 'stream';
+import satori from 'satori';
+import { html } from 'satori-html';
+import sharp from 'sharp';
 
 const IMGBB_API_KEY = config.IMGBB_API_KEY;
 
-export async function generateScriptImage(scriptText: string): Promise<string> {
-  let page;
-  try {
-    const browser = await getBrowser();
-    page = await browser.newPage();
+// Cache fonts in memory
+let fontRegular: Buffer | null = null;
+let fontBold: Buffer | null = null;
 
-    // Parse Script Sections
-    let hook = '', body = '', cta = '';
-    
-    // Simple parsing strategy: Split by headers
-    const parts = scriptText.split(/\[(HOOK|BODY|CTA)\]/i);
-    // parts[0] might be empty or preamble
-    // parts[1] is header name, parts[2] is content, etc.
-    
-    // Default fallback if structure is missing
-    hook = scriptText; 
+async function loadFonts() {
+  if (fontRegular && fontBold) return { fontRegular, fontBold };
 
-    for (let i = 1; i < parts.length; i += 2) {
-        const header = parts[i].toUpperCase();
-        const content = parts[i+1]?.trim() || '';
+  logger.info('Downloading fonts for image generation...');
+  const [regRes, boldRes] = await Promise.all([
+    axios.get('https://unpkg.com/@fontsource/inter@5.0.15/files/inter-latin-400-normal.woff', { responseType: 'arraybuffer' }),
+    axios.get('https://unpkg.com/@fontsource/inter@5.0.15/files/inter-latin-700-normal.woff', { responseType: 'arraybuffer' })
+  ]);
+
+  fontRegular = Buffer.from(regRes.data);
+  fontBold = Buffer.from(boldRes.data);
+  logger.info('Fonts loaded into memory.');
+  return { fontRegular, fontBold };
+}
+
+// Helper to clean and format text
+function formatTextForSatori(text: string): string {
+    if (!text) return '';
+    
+    // 1. Remove Markdown artifacts
+    let clean = text.replace(/(\*\*|\*|__)/g, '');
+
+    // 2. Split by Visual Cues (parentheses)
+    const parts = clean.split(/(\([^)]+\))/g);
+    
+    return parts.map(part => {
+        if (!part.trim()) return '';
         
-        if (header === 'HOOK') hook = content;
-        else if (header === 'BODY') body = content;
-        else if (header === 'CTA') cta = content;
+        if (part.startsWith('(') && part.endsWith(')')) {
+            // Visual Cue -> Distinct, Compact Box
+            const content = part.slice(1, -1); // remove parens for cleaner look
+            return `
+            <div style="display: flex; flex-direction: row; align-items: flex-start; width: 100%; background-color: #f3f4f6; border-radius: 8px; padding: 12px 20px; margin-top: 12px; margin-bottom: 12px;">
+                <span style="font-size: 24px; margin-right: 12px; opacity: 0.7;">👁️</span>
+                <span style="font-size: 24px; color: #4b5563; font-family: 'Inter'; font-weight: 500; font-style: italic; line-height: 1.4;">${content}</span>
+            </div>`;
+        } else {
+            // Dialogue -> Text Block
+            // We use a clean block
+            return `
+            <div style="display: flex; width: 100%; margin-top: 8px; margin-bottom: 8px;">
+                 <span style="font-size: 36px; color: #111827; font-family: 'Inter'; font-weight: 400; line-height: 1.5;">${part}</span>
+            </div>`; 
+        }
+    }).join('');
+}
+
+export async function generateScriptImage(scriptText: string): Promise<string> {
+  try {
+    // 1. Prepare Content
+    let hook = '', body = '', cta = '';
+    const parts = scriptText.split(/\[(HOOK|BODY|CTA)\]/i);
+    // Fallback
+    if (parts.length < 2) {
+       hook = "Script Output";
+       body = scriptText;
+    } else {
+        for (let i = 1; i < parts.length; i += 2) {
+            const header = parts[i].toUpperCase();
+            const content = parts[i+1]?.trim() || '';
+            if (header === 'HOOK') hook = content;
+            else if (header === 'BODY') body = content;
+            else if (header === 'CTA') cta = content;
+        }
     }
 
-    // Set content with premium layout
-    await page.setContent(`
-        <html>
-          <head>
-            <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap" rel="stylesheet">
-            <style>
-              body {
-                width: 1080px;
-                padding: 80px;
-                font-family: 'Poppins', sans-serif;
-                background: #F8F9FA;
-                color: #111;
-                display: flex;
-                flex-direction: column;
-                gap: 40px;
-              }
-              .hook-container {
-                border-left: 8px solid #000;
-                padding-left: 32px;
-                margin-bottom: 20px;
-              }
-              .hook {
-                font-size: 36px;
-                font-weight: 700; /* Bold */
-                line-height: 1.3;
-                color: #000;
-                white-space: pre-wrap;
-              }
-              .body {
-                font-size: 26px;
-                font-weight: 400; /* Regular */
-                line-height: 1.6;
-                color: #333;
-                white-space: pre-wrap;
-              }
-              .cta-container {
-                margin-top: 20px;
-                background: #EAECEF;
-                padding: 30px;
-                border-radius: 16px;
-                text-align: center;
-              }
-              .cta {
-                font-size: 28px;
-                font-weight: 700;
-                color: #000;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-              }
-            </style>
-          </head>
-          <body>
-            
-            ${hook ? `
-            <div class="hook-container">
-              <div class="hook">${hook}</div>
-            </div>` : ''}
+    // 2. Load Fonts
+    const { fontRegular, fontBold } = await loadFonts();
 
-            ${body ? `
-            <div class="body">
-${body}
-            </div>` : ''}
+    // 3. Define Aesthetic Template (Fixed Overflow & Distinction)
+    // - Reduced margins/padding (80px -> 60px).
+    // - Smaller font sizes (Hook 56->48, Title 24->20).
+    
+    const template = html(`
+      <div style="display: flex; flex-direction: column; width: 1080px; height: 1920px; background-color: #ffffff; padding: 60px; justify-content: flex-start; align-items: flex-start;">
+        
+        <!-- Header -->
+        <div style="display: flex; width: 100%; border-bottom: 2px solid #e5e7eb; padding-bottom: 30px; margin-bottom: 40px;">
+           <span style="font-size: 20px; color: #9ca3af; font-family: 'Inter'; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;">ScriptFlow AI</span>
+        </div>
 
-            ${cta ? `
-            <div class="cta-container">
-              <div class="cta">${cta}</div>
-            </div>` : ''}
+        <!-- Hook Section -->
+        ${hook ? `
+        <div style="display: flex; flex-direction: row; width: 100%; margin-bottom: 40px;">
+           <div style="display: flex; width: 8px; background-color: #000000; margin-right: 32px; border-radius: 4px;"></div>
+           <div style="display: flex; flex-direction: column; flex: 1;">
+               <span style="font-size: 48px; color: #000000; font-weight: 700; line-height: 1.3;">
+                 ${formatTextForSatori(hook)}
+               </span>
+           </div>
+        </div>
+        ` : ''}
 
-            ${!body && !cta ? `<div class="body">${scriptText}</div>` : ''}
+        <!-- Body Section -->
+        ${body ? `
+        <div style="display: flex; flex-direction: column; width: 100%; margin-bottom: 40px; flex-grow: 1; overflow: hidden;">
+           <div style="display: flex; flex-direction: column;">
+             ${formatTextForSatori(body)}
+           </div>
+        </div>
+        ` : ''}
 
-          </body>
-        </html>
+        <!-- CTA Section -->
+        ${cta ? `
+        <div style="display: flex; width: 100%; justify-content: center; margin-top: auto; padding-top: 40px;">
+           <div style="display: flex; background-color: #f3f4f6; color: #1f2937; padding: 24px 60px; border-radius: 999px; font-size: 32px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;">
+             ${formatTextForSatori(cta)}
+           </div>
+        </div>
+        ` : ''}
+        
+      </div>
     `);
 
-    // Dynamic viewport height
-    const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
-    await page.setViewport({ width: 1080, height: bodyHeight });
+    // 4. Generate SVG
+    logger.info('Generating SVG with Satori...');
+    const svg = await satori(template as any, {
+      width: 1080,
+      height: 1920,
+      fonts: [
+        { name: 'Inter', data: fontRegular!, weight: 400, style: 'normal' },
+        { name: 'Inter', data: fontBold!, weight: 700, style: 'normal' },
+        { name: 'Inter', data: fontRegular!, weight: 500, style: 'italic' } 
+      ]
+    });
 
-    // Screenshot
-    const imageScreenshot = await page.screenshot({ fullPage: true, encoding: 'binary' });
-    const imageBuffer = Buffer.from(imageScreenshot);
-    
-    logger.info('Image generated successfully, uploading to ImgBB...');
-    logger.info(`Image buffer size: ${imageBuffer.length}, isBuffer: ${Buffer.isBuffer(imageBuffer)}`);
+    // 5. Convert to PNG
+    logger.info('Converting SVG to PNG with Sharp...');
+    const imageBuffer = await sharp(Buffer.from(svg))
+        .png({ quality: 90 }) 
+        .toBuffer();
 
+    // 6. Upload
+    logger.info(`Image generated (${imageBuffer.length} bytes). Uploading to ImgBB...`);
     const formData = new FormData();
-    // Wrap in Readable stream to satisfy form-data/combined-stream requirements preventing "source.on" error
     formData.append('image', Readable.from(imageBuffer), { filename: 'script.png' });
 
     const uploadResponse = await axios.post(
       `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
       formData,
-      {
-        headers: {
-          ...formData.getHeaders(),
-        },
-      }
+      { headers: { ...formData.getHeaders() } }
     );
 
-    if (uploadResponse.data && uploadResponse.data.data && uploadResponse.data.data.url) {
+    if (uploadResponse.data?.data?.url) {
       const imageUrl = uploadResponse.data.data.url;
-      logger.info(`Image uploaded to ImgBB: ${imageUrl}`);
+      logger.info(`Image uploaded: ${imageUrl}`);
       return imageUrl;
     } else {
-      throw new Error('ImgBB response did not contain URL');
+      throw new Error('ImgBB response missing URL');
     }
 
   } catch (error: any) {
-    logger.error('Failed to generate or upload image: ' + (error.message || error));
+    logger.error('Failed to generate image: ' + (error.message || error));
     throw error;
-  } finally {
-    if (page) {
-      await page.close().catch(e => logger.error(`Failed to close page: ${e}`));
-    }
   }
 }
