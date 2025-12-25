@@ -1,144 +1,147 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
-import pLimit from 'p-limit';
 import { scriptGenerationSchema } from '../validators/requestValidator';
 import { generateRequestHash } from '../utils/hash';
-import { getScriptByHash, saveScript } from '../db/sqlite';
 import { logger } from '../utils/logger';
 
-// Services
-import { downloadReel } from '../services/reelDownloader';
-import { extractAudio } from '../services/audioExtractor';
-import { transcribeAudio } from '../services/transcription';
-import { generateScript } from '../services/scriptGenerator';
-import { cleanupFiles } from '../services/cleanup';
-import { sendToManyChat } from '../services/manychat';
-import { generateScriptImage } from '../utils/imageGenerator';
+// Database
+import { Script, Job } from '../db/models';
+
+// Queue
+import { addScriptJob } from '../queue';
 
 /**
- * ASYNC HANDLER (Option B)
- * Returns immediate response to ManyChat to prevent timeout.
- * Processes video in background and sends result via ManyChat API.
+ * ASYNC HANDLER with BullMQ
+ * 
+ * Flow:
+ * 1. Validate request
+ * 2. Check cache (idempotency)
+ * 3. Add job to BullMQ queue
+ * 4. Return immediate response
+ * 5. Worker processes job in background
+ * 6. Worker sends result via ManyChat API
  */
 export const generateScriptHandler = async (req: Request, res: Response) => {
   const requestId = crypto.randomUUID();
 
-  // 1. Validation
-  const parseResult = scriptGenerationSchema.safeParse(req.body);
-  if (!parseResult.success) {
-    logger.warn('Validation failed', parseResult.error);
-    return res.status(400).json({
-      status: 'error',
-      code: 'INVALID_INPUT',
-      message: parseResult.error.issues.map(e => e.message).join(', ')
-    });
-  }
-
-  const { manychat_user_id, reel_url, user_idea } = parseResult.data;
-  const requestHash = generateRequestHash(manychat_user_id, reel_url, user_idea);
-
-  // 2. Idempotency Check (Fast Path)
-  const cachedScript = getScriptByHash(requestHash);
-  if (cachedScript) {
-    logger.info(`Cache hit: ${requestHash}`);
-    // If cached, we can return it immediately or send it async. 
-    // For consistency with the Flow, let's return it immediately IF it's fast enough, 
-    // but the contract is now "I'll get back to you".
-    // Actually, if we have it, just return it. ManyChat can handle a fast JSON response.
-    return res.json({
-      script: cachedScript.script_text
-    });
-  }
-
-  // 3. Immediate Response (prevent timeout)
-  // We return a "Processing" signal. ManyChat should be configured to ignore this JSON 
-  // or mapped to a standard "We are working on it" message.
-  res.json({
-    status: 'queued',
-    message: 'Analyzing your reel... I will send the script in a new message shortly!'
-  });
-
- // 4. Background Processing
-  // Use p-limit to restrict concurrency
-  limit(() => processAsyncScript(requestId, requestHash, manychat_user_id, reel_url, user_idea));
-};
-
-// ... existing code ...
-
-const limit = pLimit(2); // Limit to 2 concurrent jobs to prevent OOM
-
-// Background Worker
-async function processAsyncScript(
-  requestId: string, 
-  requestHash: string,
-  userId: string, 
-  url: string, 
-  idea: string
-) {
-  logger.info(`[${requestId}] Starting background analysis`);
-  let videoPath: string | null = null;
-  let audioPath: string | null = null;
-
   try {
-    // A. Download
-    videoPath = await downloadReel(url, requestId);
-    
-    // B. Extract
-    audioPath = await extractAudio(videoPath, requestId);
-
-    // C. Transcribe
-    const transcript = await transcribeAudio(audioPath);
-    logger.info(`[${requestId}] Transcription length: ${transcript?.length || 0}`);
-    if (transcript) {
-        logger.info(`[${requestId}] Transcription text: ${transcript}`);
+    // 1. Validation
+    const parseResult = scriptGenerationSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      logger.warn('Validation failed', parseResult.error);
+      return res.status(400).json({
+        status: 'error',
+        code: 'INVALID_INPUT',
+        message: parseResult.error.issues.map(e => e.message).join(', ')
+      });
     }
 
-    // D. Generate
-    const script = await generateScript(idea, transcript);
+    const { subscriber_id, reel_url, user_idea } = parseResult.data;
+    const requestHash = generateRequestHash(subscriber_id, reel_url, user_idea);
 
-    // E. Save
-    saveScript(requestHash, userId, url, idea, script);
+    // 2. Idempotency Check (MongoDB)
+    const cachedScript = await Script.findOne({ requestHash }).lean();
+    if (cachedScript) {
+      logger.info(`Cache hit: ${requestHash}`);
+      return res.json({
+        status: 'success',
+        cached: true,
+        script: cachedScript.scriptText,
+        imageUrl: cachedScript.imageUrl || null
+      });
+    }
 
-    // F. Send to ManyChat
-    logger.info(`[${requestId}] Generated script: ${script}`);
+    // 3. Check if job already exists (prevent duplicate processing)
+    const existingJob = await Job.findOne({ 
+      requestHash, 
+      status: { $in: ['queued', 'processing'] } 
+    });
     
-    // Convert to Image
-    logger.info(`[${requestId}] Generating image from script...`);
-    const imageUrl = await generateScriptImage(script);
+    if (existingJob) {
+      logger.info(`Job already in queue: ${existingJob.jobId}`);
+      return res.json({
+        status: 'queued',
+        jobId: existingJob.jobId,
+        message: 'Your script is already being processed. Please wait!'
+      });
+    }
 
-    // Send Image URL to ManyChat
-    await sendToManyChat({
-      subscriber_id: userId,
-      field_name: 'script_image_url', // Changed from text field to image URL field
-      field_value: imageUrl
+    // 4. Create job record in MongoDB
+    await Job.create({
+      jobId: requestId,
+      subscriberId: subscriber_id,
+      status: 'queued',
+      reelUrl: reel_url,
+      userIdea: user_idea,
+      requestHash,
+      attempts: 0
+    });
+
+    // 5. Add to BullMQ queue
+    await addScriptJob({
+      requestId,
+      requestHash,
+      subscriberId: subscriber_id,
+      reelUrl: reel_url,
+      userIdea: user_idea
+    });
+
+    logger.info(`[${requestId}] Job queued for user ${subscriber_id}`);
+
+    // 6. Immediate response (prevents ManyChat timeout)
+    res.json({
+      status: 'queued',
+      jobId: requestId,
+      message: 'Analyzing your reel... I will send the script in a new message shortly!'
     });
 
   } catch (error: any) {
-    logger.error(`[${requestId}] Background processing failed`, error);
-    if (error.response && error.response.data) {
-        console.log('ManyChat Error Details:', JSON.stringify(error.response.data, null, 2));
+    logger.error(`[${requestId}] Failed to queue job:`, error);
+    
+    res.status(500).json({
+      status: 'error',
+      code: 'QUEUE_ERROR',
+      message: 'Failed to process request. Please try again.'
+    });
+  }
+};
+
+/**
+ * Get job status (optional endpoint for debugging)
+ */
+export const getJobStatusHandler = async (req: Request, res: Response) => {
+  try {
+    const { jobId } = req.params;
+    
+    const job = await Job.findOne({ jobId }).lean();
+    
+    if (!job) {
+      return res.status(404).json({
+        status: 'error',
+        code: 'NOT_FOUND',
+        message: 'Job not found'
+      });
     }
-    
-    // Fallback? Yes, send a fallback script via ManyChat API
-    const fallbackScript = `I couldn't watch that specific reel, but here is a script based on your idea:
-    
-HOOK
-(Start with a strong statement about ${idea})
 
-BODY
-(Explain your main point about ${idea})
-
-CTA
-(Tell them to comment or follow)`;
-
-    await sendToManyChat({
-      subscriber_id: userId,
-      field_name: 'AI_Script_Result',
-      field_value: fallbackScript
+    res.json({
+      status: 'success',
+      job: {
+        id: job.jobId,
+        status: job.status,
+        attempts: job.attempts,
+        createdAt: job.createdAt,
+        completedAt: job.completedAt,
+        processingTimeMs: job.processingTimeMs,
+        error: job.error
+      }
     });
 
-  } finally {
-    // Cleanup
-    cleanupFiles([videoPath, audioPath]);
+  } catch (error) {
+    logger.error('Failed to get job status:', error);
+    res.status(500).json({
+      status: 'error',
+      code: 'INTERNAL_ERROR',
+      message: 'Failed to get job status'
+    });
   }
-}
+};

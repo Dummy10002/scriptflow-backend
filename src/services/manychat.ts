@@ -18,6 +18,8 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
   }
 
   try {
+    logger.info(`Sending to ManyChat. Subscriber: ${payload.subscriber_id}, Value Length: ${payload.field_value.length}`);
+
     // 1. Set the Custom Field by ID (Most Reliable)
     // Ensure subscriber_id is an integer if required by the API
     const subscriberIdInt = parseInt(payload.subscriber_id, 10);

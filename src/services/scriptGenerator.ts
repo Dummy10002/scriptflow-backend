@@ -1,9 +1,44 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '../utils/logger';
+import { VideoAnalysis } from './videoAnalyzer';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-export async function generateScript(userIdea: string, transcript: string | null): Promise<string> {
+export interface ScriptGeneratorOptions {
+  userIdea: string;
+  transcript: string | null;
+  visualAnalysis?: VideoAnalysis | null;  // Enhanced visual context
+}
+
+/**
+ * Generate a script using the "Steal Like an Artist" framework.
+ * 
+ * When visualAnalysis is provided, the script incorporates visual cues,
+ * hook patterns, and scene flow from the reference video.
+ */
+export async function generateScript(options: ScriptGeneratorOptions): Promise<string>;
+export async function generateScript(userIdea: string, transcript: string | null): Promise<string>;
+export async function generateScript(
+  optionsOrIdea: ScriptGeneratorOptions | string, 
+  transcript?: string | null
+): Promise<string> {
+  // Handle both old and new signatures for backwards compatibility
+  let userIdea: string;
+  let transcriptText: string | null;
+  let visualAnalysis: VideoAnalysis | null | undefined;
+
+  if (typeof optionsOrIdea === 'string') {
+    // Legacy signature: generateScript(userIdea, transcript)
+    userIdea = optionsOrIdea;
+    transcriptText = transcript ?? null;
+    visualAnalysis = null;
+  } else {
+    // New signature: generateScript(options)
+    userIdea = optionsOrIdea.userIdea;
+    transcriptText = optionsOrIdea.transcript;
+    visualAnalysis = optionsOrIdea.visualAnalysis;
+  }
+
   const model = genAI.getGenerativeModel({ 
     // Recommended: Use gemini-1.5-flash or gemini-2.0-flash
     model: "gemini-2.5-flash", 
@@ -21,11 +56,37 @@ export async function generateScript(userIdea: string, transcript: string | null
     - Vocabulary: Use technical authority words (e.g., if UI/UX, use terms like 'visual hierarchy', '8pt grid', 'cognitive friction').`
   });
 
+  // Build reference DNA section - now includes visual context if available
+  let referenceDNA = '';
+  
+  if (transcriptText) {
+    referenceDNA += `TRANSCRIPT (What was said):\n"${transcriptText}"\n\n`;
+  }
+
+  if (visualAnalysis) {
+    if (visualAnalysis.visualCues.length > 0) {
+      referenceDNA += `VISUAL HOOKS (What was shown):\n${visualAnalysis.visualCues.map(c => `- ${c}`).join('\n')}\n\n`;
+    }
+    if (visualAnalysis.hookType && visualAnalysis.hookType !== 'Unknown') {
+      referenceDNA += `HOOK PATTERN: ${visualAnalysis.hookType}\n\n`;
+    }
+    if (visualAnalysis.tone && visualAnalysis.tone !== 'Unknown') {
+      referenceDNA += `DETECTED TONE: ${visualAnalysis.tone}\n\n`;
+    }
+    if (visualAnalysis.sceneDescriptions.length > 0) {
+      referenceDNA += `SCENE FLOW:\n${visualAnalysis.sceneDescriptions.join('\n')}\n\n`;
+    }
+  }
+
+  if (!referenceDNA) {
+    referenceDNA = 'No reference provided. Use an intense, strategic tone.';
+  }
+
   const prompt = `
   Apply the "Steal Like an Artist" framework to generate a new script.
 
   REFERENCE DNA (The Source to Steal From):
-  "${transcript ? transcript : "No transcript provided. Use an intense, strategic tone."}"
+  ${referenceDNA}
 
   NEW CONCEPT (The Topic to Apply the DNA to):
   "${userIdea}"
@@ -33,21 +94,33 @@ export async function generateScript(userIdea: string, transcript: string | null
   INSTRUCTIONS:
   1. **LINGUISTIC STYLE TRANSFER**: Detect the exact language mix of the transcript. Output must match it.
   
-  2. STRUCTURE: Your output MUST be strictly structured into these three sections with specific headers:
+  2. **STRICT OUTPUT FORMAT**: Each section MUST have BOTH visual direction AND spoken dialogue clearly separated:
      
      [HOOK]
-     (The opening line. High status, punchy, or a "Do you know..." hook. Max 1-2 sentences.)
+     🎬 VISUAL: (Camera angle, framing, gesture, text overlay - what viewer SEES)
+     💬 SAY: "(Exact words to speak - the dialogue)"
 
      [BODY]
-     (The main strategic insight or logical leap. Apply the "Steal Like an Artist" framework here. Max 3-4 sentences.)
+     🎬 VISUAL: (Scene description, on-screen text, transitions)
+     💬 SAY: "(Spoken content)"
+     
+     (Multiple VISUAL/SAY pairs allowed per section)
 
      [CTA]
-     (A short, non-cringe call to action. e.g. "Comment 'Scale' for details" or "Follow for more".)
+     🎬 VISUAL: (Final visual setup, text overlay if any)
+     💬 SAY: "(Call to action dialogue)"
      
-  3. DECONSTRUCT & TRANSFORMATION: Apply the reference video's logic to the NEW CONCEPT.
-  4. PACING: Keep it tight (30-45 seconds spoken).
+  3. VISUAL GUIDELINES:
+     - Be specific: "Close-up face shot" not just "camera on face"
+     - Include text overlays: "Text appears: 'The 80/20 Rule'"
+     - Note transitions: "Jump cut to screen recording"
+     
+  4. DIALOGUE GUIDELINES:
+     - Keep it punchy and spoken-natural
+     - Match the reference's language style (Hinglish, casual English, etc.)
+     - PACING: 30-45 seconds total spoken time
 
-  Return ONLY the final spoken script text with the headers. Do not add markdown formatting like **bold** or *italic*.`;
+  Return ONLY the structured script with [HOOK], [BODY], [CTA] headers and 🎬 VISUAL: / 💬 SAY: lines. No other text.`;
 
   try {
     const result = await model.generateContent(prompt);
