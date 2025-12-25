@@ -61,33 +61,50 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     let transcript: string | null = null;
 
     if (ANALYSIS_MODE === 'hybrid' || ANALYSIS_MODE === 'frames') {
-      logger.info(`[${requestId}] Extracting frames...`);
-      const { frames, extractionTimeMs } = await extractFrames(videoPath, requestId, {
+      logger.info(`[${requestId}] Extracting frames & audio...`);
+      
+      const framePromise = extractFrames(videoPath, requestId, {
         quality: 5,
         width: 480
       });
-      logger.info(`[${requestId}] Frame extraction completed in ${extractionTimeMs}ms`);
+
+      let audioPromise: Promise<string | null> | null = null;
+      if (ANALYSIS_MODE === 'hybrid') {
+        audioPromise = extractAudio(videoPath, requestId);
+      }
+
+      // Parallel execution (Optimization: Save ~2-3s)
+      const [frameResult, audioResult] = await Promise.all([
+        framePromise,
+        audioPromise ? audioPromise : Promise.resolve(null)
+      ]);
+
+      const { frames, extractionTimeMs } = frameResult;
+      audioPath = audioResult;
+      
+      logger.info(`[${requestId}] Frames extracted in ${extractionTimeMs}ms`);
+      if (audioPath) logger.info(`[${requestId}] Audio extracted`);
+      
       await job.updateProgress(40);
 
       if (frames.length > 0) {
         frameDir = path.dirname(frames[0]);
 
-        if (ANALYSIS_MODE === 'hybrid') {
-          audioPath = await extractAudio(videoPath, requestId);
-        }
-
         logger.info(`[${requestId}] Analyzing video with ${frames.length} frames...`);
         videoAnalysis = await analyzeVideo({
           frames,
-          audioPath: ANALYSIS_MODE === 'hybrid' ? audioPath : undefined,
-          includeAudio: ANALYSIS_MODE === 'hybrid'
+          audioPath: audioPath || undefined,
+          includeAudio: !!audioPath
         });
 
         transcript = videoAnalysis.transcript;
         await job.updateProgress(60);
       } else {
         logger.warn(`[${requestId}] Frame extraction failed, falling back to audio-only`);
-        audioPath = await extractAudio(videoPath, requestId);
+        if (!audioPath) {
+           // If we didn't extract audio yet (e.g. somehow failed parallel), try strictly now
+           audioPath = await extractAudio(videoPath, requestId);
+        }
         videoAnalysis = await analyzeVideo({ audioPath, includeAudio: true });
         transcript = videoAnalysis.transcript;
         await job.updateProgress(60);

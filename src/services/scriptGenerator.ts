@@ -39,23 +39,6 @@ export async function generateScript(
     visualAnalysis = optionsOrIdea.visualAnalysis;
   }
 
-  const model = genAI.getGenerativeModel({ 
-    // Recommended: Use gemini-1.5-flash or gemini-2.0-flash
-    model: "gemini-2.5-flash", 
-    systemInstruction: `You are a World-Class Creative Strategist who follows the "Steal Like an Artist" philosophy. 
-    
-    Your goal is to perform a "Surgical Good Theft": 
-    1. Analyze the DNA of a reference video (its pacing, psychological hooks, and logical structure).
-    2. Emulate the *thinking* behind the reference, not the words.
-    3. Remix that structure into a new script based on the user's specific concept.
-    
-    Rules:
-    - No hashtags, no emojis, and no markdown.
-    - Style: High-status, punchy, and calculated.
-    - Tone: Pivot from a surface-level hook to a deep strategic truth.
-    - Vocabulary: Use technical authority words (e.g., if UI/UX, use terms like 'visual hierarchy', '8pt grid', 'cognitive friction').`
-  });
-
   // Build reference DNA section - now includes visual context if available
   let referenceDNA = '';
   
@@ -122,12 +105,55 @@ export async function generateScript(
 
   Return ONLY the structured script with [HOOK], [BODY], [CTA] headers and 🎬 VISUAL: / 💬 SAY: lines. No other text.`;
 
-  try {
-    const result = await model.generateContent(prompt);
-    const script = result.response.text();
-    return script.trim();
-  } catch (error) {
-    logger.error('Script generation failed', error);
-    throw error;
+  // Model configuration with fallback hierarchy
+  const MODEL_HIERARCHY = [
+    'gemini-2.5-flash',      // Primary (User requested)
+    'gemini-2.5-flash-lite', // Fallback 1
+    'gemini-1.5-flash',      // Fallback 2
+  ];
+
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+  let lastError: any = null;
+
+  for (const modelName of MODEL_HIERARCHY) {
+    try {
+      logger.info(`Generating script with model: ${modelName}`);
+      
+      const model = genAI.getGenerativeModel({ 
+        model: modelName, 
+        systemInstruction: `You are a World-Class Creative Strategist who follows the "Steal Like an Artist" philosophy. 
+        
+        Your goal is to perform a "Surgical Good Theft": 
+        1. Analyze the DNA of a reference video (its pacing, psychological hooks, and logical structure).
+        2. Emulate the *thinking* behind the reference, not the words.
+        3. Remix that structure into a new script based on the user's specific concept.
+        
+        Rules:
+        - No hashtags, no emojis, and no markdown.
+        - Style: High-status, punchy, and calculated.
+        - Tone: Pivot from a surface-level hook to a deep strategic truth.
+        - Vocabulary: Use technical authority words (e.g., if UI/UX, use terms like 'visual hierarchy', '8pt grid', 'cognitive friction').`
+      });
+
+      const result = await model.generateContent(prompt);
+      const script = result.response.text();
+      return script.trim();
+
+    } catch (error: any) {
+      lastError = error;
+      const isRateLimit = error.message?.includes('429') || error.status === 429;
+      
+      logger.warn(`Script generation failed on ${modelName}: ${error.message}`);
+
+      if (isRateLimit) {
+        logger.warn('Rate limit hit, waiting before retry...');
+        await sleep(2000);
+      }
+    }
   }
+
+  // If all models fail
+  logger.error('All script generation models failed.');
+  throw lastError || new Error('Script generation failed');
 }

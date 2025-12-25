@@ -39,12 +39,13 @@ if (!apiKey || apiKey.length < 10) {
 const genAI = new GoogleGenerativeAI(apiKey);
 
 /**
- * File to GenerativePart converter
+ * File to GenerativePart converter (Async)
  */
-function fileToGenerativePart(path: string, mimeType: string): Part {
+async function fileToGenerativePart(path: string, mimeType: string): Promise<Part> {
+  const data = await fs.promises.readFile(path);
   return {
     inlineData: {
-      data: fs.readFileSync(path).toString('base64'),
+      data: data.toString('base64'),
       mimeType
     },
   };
@@ -64,6 +65,24 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
   // Input validation
   if (frames.length === 0 && !audioPath) {
     throw new Error('No input provided for analysis (frames or audio)');
+  }
+
+  // Optimize: Read files into memory ONCE to avoid repeated I/O in the loop
+  const frameParts: Part[] = [];
+  
+  // Read frames in parallel
+  if (frames.length > 0) {
+    const framePromises = frames
+      .filter(f => fs.existsSync(f))
+      .map(f => fileToGenerativePart(f, 'image/jpeg'));
+    
+    frameParts.push(...await Promise.all(framePromises));
+  }
+
+  // Read audio
+  let audioPart: Part | null = null;
+  if (includeAudio && audioPath && fs.existsSync(audioPath)) {
+    audioPart = await fileToGenerativePart(audioPath, 'audio/mp3');
   }
 
   // Prepare prompt
@@ -91,20 +110,10 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
       const model = genAI.getGenerativeModel({ model: modelName });
 
       // Prepare parts
-      const parts: (string | Part)[] = [prompt];
+      const parts: (string | Part)[] = [prompt, ...frameParts];
       
-      // Add frames
-      for (const framePath of frames) {
-        if (fs.existsSync(framePath)) {
-          parts.push(fileToGenerativePart(framePath, 'image/jpeg'));
-        }
-      }
-
-      // Add audio
-      if (includeAudio && audioPath && fs.existsSync(audioPath)) {
-        // Gemini supports audio via inline data or upload. Using inline for short clips (< 20MB)
-        // Check size? Assuming small for reels.
-        parts.push(fileToGenerativePart(audioPath, 'audio/mp3'));
+      if (audioPart) {
+        parts.push(audioPart);
       }
 
       const result = await model.generateContent(parts);

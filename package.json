@@ -27,7 +27,6 @@
     "hpp": "^0.2.3",
     "ioredis": "^5.8.2",
     "mongoose": "^9.0.2",
-    "node-html-to-image": "^5.0.0",
     "rate-limit-redis": "^4.3.1",
     "satori": "^0.18.3",
     "satori-html": "^0.3.2",

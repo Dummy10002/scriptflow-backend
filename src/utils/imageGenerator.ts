@@ -1,11 +1,18 @@
+import { Resvg } from '@resvg/resvg-js';
+import satori from 'satori';
+import { html } from 'satori-html';
 import axios from 'axios';
 import FormData from 'form-data';
+import fs from 'fs';
+import path from 'path';
 import { logger } from './logger';
 import { config } from '../config';
-import { getBrowser } from '../services/browser';
-import { Readable } from 'stream';
 
 const IMGBB_API_KEY = config.IMGBB_API_KEY;
+
+// Load fonts once
+const fontData = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Inter-Bold.ttf'));
+const fontDataRegular = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Inter-Regular.ttf'));
 
 /**
  * Parse script into structured sections with VISUAL/SAY lines
@@ -40,25 +47,25 @@ function formatLine(line: string): string {
   // Check if it's a VISUAL line
   if (line.includes('🎬') || line.toLowerCase().startsWith('visual:')) {
     const content = line.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '');
-    return `<div class="visual-line">
-      <span class="visual-icon">🎬</span>
-      <span class="visual-label">VISUAL:</span>
-      <span class="visual-content">${escapeHtml(content)}</span>
+    return `<div style="display: flex; align-items: flex-start; gap: 10px; background: rgba(100,100,100,0.2); padding: 15px 20px; border-radius: 10px; margin-bottom: 12px; border-left: 4px solid #888; width: 100%;">
+      <span style="font-size: 20px;">🎬</span>
+      <span style="font-size: 12px; font-weight: 700; color: #aaa; text-transform: uppercase; min-width: 60px;">VISUAL:</span>
+      <span style="font-size: 18px; font-style: italic; color: #ccc; line-height: 1.5;">${escapeHtml(content)}</span>
     </div>`;
   }
   
   // Check if it's a SAY line
   if (line.includes('💬') || line.toLowerCase().startsWith('say:')) {
     const content = line.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '');
-    return `<div class="say-line">
-      <span class="say-icon">💬</span>
-      <span class="say-label">SAY:</span>
-      <span class="say-content">${escapeHtml(content)}</span>
+    return `<div style="display: flex; align-items: flex-start; gap: 10px; background: rgba(100,255,218,0.1); padding: 15px 20px; border-radius: 10px; margin-bottom: 12px; border-left: 4px solid #64ffda; width: 100%;">
+      <span style="font-size: 20px;">💬</span>
+      <span style="font-size: 12px; font-weight: 700; color: #64ffda; text-transform: uppercase; min-width: 60px;">SAY:</span>
+      <span style="font-size: 22px; font-weight: 600; color: #fff; line-height: 1.5;">${escapeHtml(content)}</span>
     </div>`;
   }
   
   // Default: regular line
-  return `<div class="regular-line">${escapeHtml(line)}</div>`;
+  return `<div style="font-size: 20px; color: #ddd; line-height: 1.6; margin-bottom: 10px;">${escapeHtml(line)}</div>`;
 }
 
 function escapeHtml(text: string): string {
@@ -70,11 +77,8 @@ function escapeHtml(text: string): string {
 }
 
 export async function generateScriptImage(scriptText: string): Promise<string> {
-  let page;
+  const startTime = Date.now();
   try {
-    const browser = await getBrowser();
-    page = await browser.newPage();
-
     // Parse script sections
     const sections = parseScript(scriptText);
     
@@ -83,154 +87,72 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     const bodyHtml = sections.body.map(formatLine).join('\n');
     const ctaHtml = sections.cta.map(formatLine).join('\n');
 
-    // Set content with premium visual hierarchy layout
-    await page.setContent(`
-        <html>
-          <head>
-            <link href="https://api.fontshare.com/v2/css?f[]=satoshi@900,700,500,400&display=swap" rel="stylesheet">
-            <style>
-              * { box-sizing: border-box; }
-              body {
-                width: 1080px;
-                padding: 60px;
-                font-family: 'Satoshi', -apple-system, sans-serif;
-                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                color: #fff;
-                margin: 0;
-              }
-              
-              .section {
-                margin-bottom: 40px;
-                background: rgba(255,255,255,0.05);
-                border-radius: 16px;
-                padding: 30px;
-                backdrop-filter: blur(10px);
-              }
-              
-              .section-header {
-                font-size: 14px;
-                font-weight: 700;
-                text-transform: uppercase;
-                letter-spacing: 3px;
-                color: #64ffda;
-                margin-bottom: 20px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid rgba(100,255,218,0.3);
-              }
-              
-              .visual-line {
-                display: flex;
-                align-items: flex-start;
-                gap: 10px;
-                background: rgba(100,100,100,0.2);
-                padding: 15px 20px;
-                border-radius: 10px;
-                margin-bottom: 12px;
-                border-left: 4px solid #888;
-              }
-              
-              .visual-icon { font-size: 20px; }
-              .visual-label {
-                font-size: 12px;
-                font-weight: 700;
-                color: #aaa;
-                text-transform: uppercase;
-                min-width: 60px;
-              }
-              .visual-content {
-                font-size: 18px;
-                font-style: italic;
-                color: #ccc;
-                line-height: 1.5;
-              }
-              
-              .say-line {
-                display: flex;
-                align-items: flex-start;
-                gap: 10px;
-                background: rgba(100,255,218,0.1);
-                padding: 15px 20px;
-                border-radius: 10px;
-                margin-bottom: 12px;
-                border-left: 4px solid #64ffda;
-              }
-              
-              .say-icon { font-size: 20px; }
-              .say-label {
-                font-size: 12px;
-                font-weight: 700;
-                color: #64ffda;
-                text-transform: uppercase;
-                min-width: 60px;
-              }
-              .say-content {
-                font-size: 22px;
-                font-weight: 600;
-                color: #fff;
-                line-height: 1.5;
-              }
-              
-              .regular-line {
-                font-size: 20px;
-                color: #ddd;
-                line-height: 1.6;
-                margin-bottom: 10px;
-              }
-              
-              .cta-section {
-                background: linear-gradient(135deg, rgba(100,255,218,0.2) 0%, rgba(100,255,218,0.05) 100%);
-                border: 2px solid rgba(100,255,218,0.5);
-              }
-              
-              .footer {
-                text-align: center;
-                margin-top: 30px;
-                font-size: 14px;
-                color: #666;
-              }
-            </style>
-          </head>
-          <body>
-            
-            ${hookHtml ? `
-            <div class="section">
-              <div class="section-header">🎯 HOOK</div>
-              ${hookHtml}
-            </div>` : ''}
+    const template = html(`
+      <div style="display: flex; flex-direction: column; width: 1080px; padding: 60px; font-family: 'Inter'; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff;">
+        
+        ${hookHtml ? `
+        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 30px;">
+          <div style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: #64ffda; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid rgba(100,255,218,0.3);">🎯 HOOK</div>
+          ${hookHtml}
+        </div>` : ''}
 
-            ${bodyHtml ? `
-            <div class="section">
-              <div class="section-header">📝 BODY</div>
-              ${bodyHtml}
-            </div>` : ''}
+        ${bodyHtml ? `
+        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 30px;">
+          <div style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: #64ffda; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid rgba(100,255,218,0.3);">📝 BODY</div>
+          ${bodyHtml}
+        </div>` : ''}
 
-            ${ctaHtml ? `
-            <div class="section cta-section">
-              <div class="section-header">🚀 CTA</div>
-              ${ctaHtml}
-            </div>` : ''}
+        ${ctaHtml ? `
+        <div style="display: flex; flex-direction: column; background: rgba(100,255,218,0.05); border: 2px solid rgba(100,255,218,0.5); border-radius: 16px; padding: 30px;">
+          <div style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: #64ffda; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid rgba(100,255,218,0.3);">🚀 CTA</div>
+          ${ctaHtml}
+        </div>` : ''}
 
-            ${!hookHtml && !bodyHtml && !ctaHtml ? `
-            <div class="section">
-              <div class="regular-line">${escapeHtml(scriptText)}</div>
-            </div>` : ''}
+        ${!hookHtml && !bodyHtml && !ctaHtml ? `
+        <div style="display: flex; flex-direction: column; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 30px;">
+          <div style="font-size: 20px; color: #ddd; line-height: 1.6;">${escapeHtml(scriptText)}</div>
+        </div>` : ''}
 
-          </body>
-        </html>
+        <div style="display: flex; justify-content: center; margin-top: 30px; font-size: 14px; color: #666;">Generated by ScriptFlow AI</div>
+      </div>
     `);
 
-    // Dynamic viewport height
-    const bodyHeight = await page.evaluate(() => document.body.scrollHeight);
-    await page.setViewport({ width: 1080, height: bodyHeight + 40 });
+    // Generate SVG with Satori
+    const svg = await satori(template as any, {
+      width: 1080,
+      fonts: [
+        {
+          name: 'Inter',
+          data: fontDataRegular,
+          weight: 400,
+          style: 'normal',
+        },
+        {
+          name: 'Inter',
+          data: fontData,
+          weight: 700,
+          style: 'normal',
+        },
+      ],
+    });
 
-    // Screenshot
-    const imageScreenshot = await page.screenshot({ fullPage: true, encoding: 'binary' });
-    const imageBuffer = Buffer.from(imageScreenshot);
+    // Convert SVG to PNG using Resvg
+    const resvg = new Resvg(svg, {
+        background: 'rgba(0,0,0,0)',
+        fitTo: {
+            mode: 'width',
+            value: 1080,
+        },
+    });
     
-    logger.info('Image generated successfully, uploading to ImgBB...');
+    const pngData = resvg.render();
+    const pngBuffer = pngData.asPng();
+    const generationTime = Date.now() - startTime;
+    logger.info(`Image generated in ${generationTime}ms (Satori)`);
 
+    // Upload to ImgBB
     const formData = new FormData();
-    formData.append('image', Readable.from(imageBuffer), { filename: 'script.png' });
+    formData.append('image', pngBuffer, { filename: 'script.png' });
 
     const uploadResponse = await axios.post(
       `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
@@ -252,11 +174,7 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
 
   } catch (error: any) {
     logger.error('Failed to generate or upload image: ' + (error.message || error));
+    // Fail gracefully? No, we need the image.
     throw error;
-  } finally {
-    if (page) {
-      await page.close().catch(e => logger.error(`Failed to close page: ${e}`));
-    }
   }
 }
-

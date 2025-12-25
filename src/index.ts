@@ -72,13 +72,7 @@ async function bootstrap() {
         await disconnectDB();
 
         // Close browser if open
-        try {
-          const { closeBrowser } = await import('./services/browser');
-          await closeBrowser();
-          logger.info('Browser service closed');
-        } catch (err) {
-          // Browser might not be initialized
-        }
+        // Browser service removed (replaced by Satori)
 
         logger.info('✅ Graceful shutdown completed');
         process.exit(0);
