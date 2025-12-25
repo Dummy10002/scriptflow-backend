@@ -3,20 +3,12 @@ import cors from 'cors';
 import { generateScriptHandler } from './api/generateScript';
 import { logger } from './utils/logger';
 import { config } from './config';
-import { rateLimiter } from './middleware/rateLimiter';
-import { authenticateKey } from './middleware/auth';
 
 export function createServer() {
   const app = express();
 
   app.use(cors());
   app.use(express.json());
-  
-  // Rate Limiting
-  app.use(rateLimiter);
-
-  // Authentication
-  app.use('/api', authenticateKey);
 
   // Global Timeout Middleware
   app.use((req: Request, res: Response, next: NextFunction) => {

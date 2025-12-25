@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const scriptGenerationSchema = z.object({
-  subscriber_id: z.string().min(1, "Subscriber ID is required").or(z.number().transform(String)),
+  manychat_user_id: z.string().min(1, "ManyChat User ID is required"),
   reel_url: z.string().url("Invalid URL").refine((url) => url.includes('instagram.com/reel'), {
     message: "URL must be an Instagram Reel URL"
   }),

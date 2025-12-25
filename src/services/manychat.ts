@@ -1,42 +1,74 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { config } from '../config';
 
 export interface ManyChatPayload {
-  subscriber_id: string; // Will be converted to integer
-  field_value: string;   // Image URL
+  subscriber_id: string;
+  field_name: string;
+  field_value: string;
+  message_tag?: string;
 }
 
 export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
   const apiKey = process.env.MANYCHAT_API_KEY;
-  const fieldIdEnv = process.env.MANYCHAT_SCRIPT_FIELD_ID;
   
-  if (!apiKey || !fieldIdEnv) {
-    logger.warn('Skipping ManyChat send: Missing MANYCHAT_API_KEY or MANYCHAT_SCRIPT_FIELD_ID.');
+  if (!apiKey) {
+    logger.warn('Skipping ManyChat send: No MANYCHAT_API_KEY provided.');
     return;
   }
 
   try {
+    // 1. Set the Custom Field by ID (Most Reliable)
+    // Ensure subscriber_id is an integer if required by the API
     const subscriberIdInt = parseInt(payload.subscriber_id, 10);
-    const fieldIdInt = parseInt(fieldIdEnv, 10);
 
     const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
+    
+    // Use the field ID explicitly from config if available, otherwise fallback to payload name
+    const fieldId = config.MANYCHAT_SCRIPT_FIELD_ID || payload.field_name;
 
-    const body = {
+    await axios.post(setFieldUrl, {
       subscriber_id: subscriberIdInt,
-      field_id: fieldIdInt,
+      field_id: parseInt(fieldId, 10), // Ensure field_id is also an integer
       field_value: payload.field_value
-    };
-
-    await axios.post(setFieldUrl, body, {
+    }, {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       }
     });
 
-    logger.info(`Successfully sent script image URL to ManyChat user: ${payload.subscriber_id}`);
+    // 2. Send the image to the user
+    // Only send the "Your script is ready" message if we are sending an image URL
+    if (payload.field_name === 'script_image_url') {
+        const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
+        
+        await axios.post(sendContentUrl, {
+            subscriber_id: payload.subscriber_id,
+            data: {
+                version: "v2",
+                content: {
+                    type: "image",
+                    url: payload.field_value,
+                    action: {
+                        type: "open_url",
+                        url: payload.field_value
+                    }
+                }
+            },
+            message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
+        }, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+    }
+
+    logger.info(`Successfully sent script to ManyChat user: ${payload.subscriber_id}`);
 
   } catch (error: any) {
     logger.error('Failed to send to ManyChat', JSON.stringify(error.response?.data || error.message, null, 2));
+    // don't throw, just log.
   }
 }
