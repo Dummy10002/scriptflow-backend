@@ -119,7 +119,17 @@ export const apiKeyAuth = (req: Request, res: Response, next: NextFunction) => {
   const validApiKey = process.env.ADMIN_API_KEY;
 
   if (!validApiKey) {
-    // If no admin key is configured, skip auth (dev mode)
+    // SECURITY: In production, API key must be configured
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('ADMIN_API_KEY not configured in production!');
+      return res.status(500).json({
+        status: 'error',
+        code: 'CONFIG_ERROR',
+        message: 'Server configuration error'
+      });
+    }
+    // Only allow unauthenticated access in development
+    logger.warn('Admin endpoint accessed without API key (dev mode)');
     return next();
   }
 

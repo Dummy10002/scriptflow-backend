@@ -9,11 +9,11 @@
     "dev": "ts-node src/index.ts"
   },
   "dependencies": {
-    "@google/generative-ai": "*",
+    "@google/generative-ai": "^0.21.0",
     "@resvg/resvg-js": "^2.6.2",
     "axios": "^1.13.2",
     "bullmq": "^5.66.2",
-    "cors": "*",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "envalid": "^8.1.1",
     "express": "^4.21.2",
@@ -31,15 +31,15 @@
     "satori": "^0.18.3",
     "satori-html": "^0.3.2",
     "yt-dlp-exec": "^1.0.2",
-    "zod": "*"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/cors": "*",
+    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/hpp": "^0.2.7",
-    "@types/node": "*",
-    "ts-node": "*",
-    "typescript": "*"
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
   }
 }

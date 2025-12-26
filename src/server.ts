@@ -3,6 +3,7 @@ import cors from 'cors';
 import { generateScriptHandler } from './api/generateScript';
 import { healthHandler, detailedHealthHandler } from './api/health';
 import { exportDatasetHandler } from './api/dataset';
+import { submitFeedbackHandler, getFeedbackStatsHandler } from './api/feedback';
 import { logger } from './utils/logger';
 import { config } from './config';
 import {
@@ -90,10 +91,16 @@ export function createServer() {
     generateScriptHandler
   );
 
+  // Feedback submission (public - tied to subscriber_id)
+  app.post('/api/v1/feedback', submitFeedbackHandler);
+
   // ===== PROTECTED ROUTES (Admin) =====
   
   // Dataset export (requires API key)
   app.get('/api/v1/dataset/export', apiKeyAuth, exportDatasetHandler);
+  
+  // Feedback stats (requires API key)
+  app.get('/api/v1/feedback/stats', apiKeyAuth, getFeedbackStatsHandler);
 
   // ===== ERROR HANDLING =====
   

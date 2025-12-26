@@ -6,11 +6,25 @@ import { logger } from '../utils/logger';
 // Max duration to process (to avoid huge files)
 const MAX_DURATION_SEC = 300; // 5 minutes
 
+/**
+ * Sanitize ID to prevent path traversal attacks
+ * SECURITY: Removes any characters that could be used to escape the temp directory
+ */
+function sanitizeId(id: string): string {
+  return id.replace(/[^a-zA-Z0-9-_]/g, '');
+}
+
 export async function downloadReel(url: string, id: string): Promise<string> {
   const tempDir = path.join(process.cwd(), 'temp');
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
-  const outputPath = path.join(tempDir, `${id}.mp4`);
+  // SECURITY: Sanitize ID to prevent path traversal (e.g., '../../../etc/passwd')
+  const safeId = sanitizeId(id);
+  if (!safeId) {
+    throw new Error('Invalid request ID');
+  }
+  
+  const outputPath = path.join(tempDir, `${safeId}.mp4`);
 
   logger.info(`Downloading reel: ${url} to ${outputPath}`);
 
@@ -39,3 +53,4 @@ export async function downloadReel(url: string, id: string): Promise<string> {
     throw new Error(`Download failed: ${error.message}`);
   }
 }
+

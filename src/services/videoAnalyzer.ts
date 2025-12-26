@@ -33,7 +33,8 @@ const apiKey = config.GEMINI_API_KEY;
 if (!apiKey || apiKey.length < 10) {
   logger.error('❌ Gemini API key missing or invalid');
 } else {
-  logger.info(`✅ Gemini API key validated (Starts with: ${apiKey.substring(0, 8)}...)`);
+  // SECURITY: Never log API key content, even partial
+  logger.info('✅ Gemini API key validated');
 }
 
 const genAI = new GoogleGenerativeAI(apiKey);

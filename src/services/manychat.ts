@@ -2,6 +2,9 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
+// SECURITY: Request timeout to prevent hung connections
+const API_TIMEOUT_MS = 30000;
+
 export interface ManyChatPayload {
   subscriber_id: string;
   field_name: string;
@@ -10,7 +13,8 @@ export interface ManyChatPayload {
 }
 
 export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
-  const apiKey = process.env.MANYCHAT_API_KEY;
+  // SECURITY: Use validated config object, not direct env access
+  const apiKey = config.MANYCHAT_API_KEY;
   
   if (!apiKey) {
     logger.warn('Skipping ManyChat send: No MANYCHAT_API_KEY provided.');
@@ -37,7 +41,8 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: API_TIMEOUT_MS
     });
 
     // 2. Send the image to the user
@@ -63,7 +68,8 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: API_TIMEOUT_MS
         });
     }
 

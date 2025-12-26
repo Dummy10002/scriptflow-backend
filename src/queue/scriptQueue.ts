@@ -11,6 +11,11 @@ export interface ScriptJobData {
   subscriberId: string;
   reelUrl: string;
   userIdea: string;
+  
+  // NEW: Optional hint parameters
+  toneHint?: 'professional' | 'funny' | 'provocative' | 'educational' | 'casual';
+  languageHint?: string;
+  mode?: 'full' | 'hook_only';
 }
 
 /**

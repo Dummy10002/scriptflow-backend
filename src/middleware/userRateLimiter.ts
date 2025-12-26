@@ -84,9 +84,13 @@ export function createUserRateLimiter(config: Partial<UserRateLimitConfig> = {})
 
       next();
     } catch (error) {
-      // If Redis fails, allow the request (fail open)
+      // SECURITY: Fail closed - deny if we can't verify rate limit
       logger.error('User rate limiter error:', error);
-      next();
+      return res.status(503).json({
+        status: 'error',
+        code: 'SERVICE_UNAVAILABLE',
+        message: 'Rate limiting service unavailable. Please try again in a moment.'
+      });
     }
   };
 }

@@ -53,21 +53,8 @@ Do NOT completely change the tone - just lean slightly in this direction.`);
   
   if (options.languageHint) {
     hints.push(`
-LANGUAGE REQUIREMENT (STRICT):
-Write ALL spoken dialogue (💬 SAY:) in ${options.languageHint} language.
-
-CRITICAL RULES:
-1. Use ONLY English/Roman alphabet (ABC...) - NEVER use native scripts like देवनागरी, ಕನ್ನಡ, தமிழ், etc.
-2. Write words as they would be SPOKEN and ROMANIZED (transliterated)
-3. Examples of correct romanization:
-   - Kannada: "Yenu maadtha idira?" NOT "ಏನು ಮಾಡ್ತಾ ಇದೀರಾ?"
-   - Hindi: "Kya kar rahe ho?" NOT "क्या कर रहे हो?"
-   - Tamil: "Enna panringa?" NOT "என்ன பண்றீங்க?"
-   - Telugu: "Emi chestunnaru?" NOT "ఏమి చేస్తున్నారు?"
-4. Use natural ${options.languageHint} phrases, idioms, and expressions
-5. Keep technical/English terms as-is if that's natural for the topic
-
-The output MUST be readable by someone who can only read English alphabet.`);
+LANGUAGE PREFERENCE (STRICT):
+Write ALL spoken dialogue (💬 SAY:) in ${options.languageHint} language.`);
   }
   
   if (options.mode === 'hook_only') {
@@ -168,13 +155,16 @@ export async function generateScript(
   "${userIdea}"
 
   INSTRUCTIONS:
-  1. **LINGUISTIC STYLE TRANSFER**: Detect the exact language mix of the transcript. Output must match it.
+  1. **INTELLIGENT LINGUISTIC STYLE**: 
+     - Detect the original language mix of the transcript.
+     - **Check NEW CONCEPT for latent preferences**: If the user mentions a specific language or tone in "${userIdea}", prioritize that.
+     - **GLOBAL ROMANIZATION RULE**: Regardless of the language used, you MUST use ONLY the English/Roman alphabet (ABC...). NEVER use native scripts like देवनागरी, ಕನ್ನಡ, etc. Romanize all non-English words naturally.
   
-  2. **STRICT OUTPUT FORMAT**: Each section MUST have BOTH visual direction AND spoken dialogue clearly separated:
-     
+  2. **STRICT OUTPUT FORMAT**: Each section MUST exactly follow this marker format:
+      
      [HOOK]
-     🎬 VISUAL: (Camera angle, framing, gesture, text overlay - what viewer SEES)
-     💬 SAY: "(Exact words to speak - the dialogue)"
+     🎬 VISUAL: (Specific camera direction/text overlay)
+     💬 SAY: "(Exact words to speak - MUST BE ROMANIZED)"
 
      [BODY]
      🎬 VISUAL: (Scene description, on-screen text, transitions)

@@ -113,8 +113,12 @@ export const betaAccessControl = async (req: Request, res: Response, next: NextF
 
   } catch (error) {
     logger.error('Beta access control error:', error);
-    // On error, allow through (fail open)
-    next();
+    // SECURITY: Fail closed - deny access if we can't verify
+    return res.status(503).json({
+      status: 'error',
+      code: 'SERVICE_UNAVAILABLE',
+      message: 'Unable to verify access. Please try again in a moment.'
+    });
   }
 };
 

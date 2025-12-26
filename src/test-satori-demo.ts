@@ -11,18 +11,26 @@ const poppinsSemiBold = readFileSync(join(__dirname, '../fonts/Poppins-SemiBold.
 // Sample script data
 const sampleScript = {
   hook: [
-    { type: 'visual', content: 'Close-up of laptop screen with code' },
-    { type: 'say', content: 'Stop wasting hours on repetitive tasks!' },
+    { type: 'visual', content: 'Close-up face shot, slightly above eye level. Speaker looking directly at camera, confident posture. Text overlay appears rapidly at bottom-center: \'NINNA PRATHI DINADA YOCHANE!\'' },
+    { type: 'say', content: 'Neenu eega ninn lifestyle-annu chennagi manage maadtha idiya. Ninage anasatte, ninn age-nalli iruva 90% janariginta smart idiya?' },
+    { type: 'visual', content: 'Jump cut to a plain beige screen, bold red text centrally: \'Nija Helbekadre?\'' },
+    { type: 'say', content: 'But, nija helbekadre, neenu next 5-10 varshad planning bagge yochane maadidiya? Illa Andre, adu ninn priority-nalli ideya?' },
+    { type: 'visual', content: 'Jump cut back to speaker at desk, leans slightly forward, gestures with open hands, one palm up. Background slightly blurred, soft desk lamp visible. Text overlay appears quickly, slightly translucent: \'SHORT-TERM HUSTLE\'' },
+    { type: 'say', content: 'Most jana immediate results ge sikkhaakkond bidtare. Adre nija longevity barodu neenu ee mooru principle galannu plan maadidaga.' },
   ],
   body: [
-    { type: 'visual', content: 'Split screen: Before vs After comparison' },
-    { type: 'say', content: 'This one simple automation saved me 10 hours every week.' },
-    { type: 'visual', content: 'Show hands-free workflow running' },
-    { type: 'say', content: 'And the best part? It runs completely on autopilot.' },
+    { type: 'visual', content: 'Quick transition to a plain beige screen. Block text \'NO 1\' appears at top-left, followed by red italicized text \'Goal Mapping\' centrally. A simplified funnel graphic quickly appears on screen, showing \'VISION\' at the top, \'MISSION\' in the middle, and \'MILESTONES\' at the bottom.' },
+    { type: 'say', content: 'Number one, Goal Mapping. Ninn long-term vision-annu sanna milestones agi break maadu. Just dream maadodalla, execute maadodu important.' },
+    { type: 'visual', content: 'Quick transition to another plain beige screen. Black text \'NO 2\' appears at top-left, followed by red italicized text \'Resource Allocation\' centrally. A simple \'To-Do\' list graphic appears, similar to the reference, but listing: \'- Time Blocks\', \'- Skill Investment\', \'- Network Building\', \'- Capital Strategy\'.' },
+    { type: 'say', content: 'Number two, Resource Allocation. Ninna time, skills, money, ee moolagalannu hege \'strategic allocation\' maadtiya anodu important.' },
+    { type: 'visual', content: 'Quick transition to another plain beige screen. Black text \'NO 3\' appears at top-left, followed by red italicized text \'Adaptability Matrix\' centrally. A circular diagram appears, similar to the reference\'s skill circle, with \'PLAN A\' in the center, and arrows pointing to outer circles/boxes labelled \'CONTINGENCY\', \'ITERATION\', \'SCENARIO B\'.' },
+    { type: 'say', content: 'Number three, Adaptability Matrix. Market badalagtirutte. Prati 6 months-ge ninn assumption-galannu review maadi, \'contingency plans\' ready maadko.' },
   ],
   cta: [
-    { type: 'visual', content: 'Point at screen with results dashboard' },
-    { type: 'say', content: 'Follow for more productivity hacks that actually work!' },
+    { type: 'visual', content: 'Jump cut back to speaker. Speaker leans back slightly, a confident, knowing look. Background returns to a more prominent work-desk setup. Text overlay appears rapidly top-center: \'PLAN FOR UNTOUCHABILITY\'' },
+    { type: 'say', content: 'Neenu eega indane ee \'long-term planning\' mindset-annu develop maadkobitta andre, next 25-30 varshada olage, neenu just competitive aagalla, literally \'untouchable\' aagtiva.' },
+    { type: 'visual', content: 'Quick transition to a full screen text overlay. Bold white text on dark background, centrally aligned: \'FOLLOW FOR BLUEPRINT\'. Below it, smaller bold white text: \'COMMENT &quot;PLANTHEFUTURE&quot;.\'' },
+    { type: 'say', content: 'Simply follow me and \'PLANTHEFUTURE\' antha comment maadi. Naanu ninn \'strategic blueprint\' share maadakke ready iddeeni.' },
   ],
 };
 

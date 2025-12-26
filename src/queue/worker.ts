@@ -15,7 +15,15 @@ import { sendToManyChat } from '../services/manychat';
 import { generateScriptImage } from '../utils/imageGenerator';
 
 // Database
-import { Script, Job, DatasetEntry } from '../db/models';
+import { Script, Job } from '../db/models';
+import { 
+  DatasetEntry, 
+  parseScriptSections, 
+  extractVisualLines, 
+  extractDialogueLines, 
+  estimateSpokenDuration,
+  countWords
+} from '../db/models/Dataset';
 
 // Analysis mode configuration
 type AnalysisMode = 'audio' | 'frames' | 'hybrid';
@@ -28,9 +36,19 @@ let worker: Worker<ScriptJobData, ScriptJobResult> | null = null;
  * This is the main worker function that handles all the heavy lifting
  */
 async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult> {
-  const { requestId, requestHash, subscriberId, reelUrl, userIdea } = job.data;
+  const { 
+    requestId, 
+    requestHash, 
+    subscriberId, 
+    reelUrl, 
+    userIdea,
+    // NEW: Optional hints
+    toneHint,
+    languageHint,
+    mode 
+  } = job.data;
   
-  logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})`);
+  logger.info(`[${requestId}] Starting job processing (attempt ${job.attemptsMade + 1})${toneHint ? ` [tone: ${toneHint}]` : ''}${mode === 'hook_only' ? ' [hook only]' : ''}`);
   
   // Update job status in MongoDB
   await Job.findOneAndUpdate(
@@ -59,6 +77,7 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     // B. Extract media based on analysis mode
     let videoAnalysis: VideoAnalysis | null = null;
     let transcript: string | null = null;
+    let frames: string[] = [];  // Track frames for dataset
 
     if (ANALYSIS_MODE === 'hybrid' || ANALYSIS_MODE === 'frames') {
       logger.info(`[${requestId}] Extracting frames & audio...`);
@@ -79,7 +98,8 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
         audioPromise ? audioPromise : Promise.resolve(null)
       ]);
 
-      const { frames, extractionTimeMs } = frameResult;
+      const { frames: extractedFrames, extractionTimeMs } = frameResult;
+      frames = extractedFrames;  // Assign to outer scope
       audioPath = audioResult;
       
       logger.info(`[${requestId}] Frames extracted in ${extractionTimeMs}ms`);
@@ -116,13 +136,19 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
       await job.updateProgress(60);
     }
 
-    // C. Generate script
+    // C. Generate script (with optional hints)
     logger.info(`[${requestId}] Generating script...`);
+    const scriptGenStartTime = Date.now();
     const scriptText = await generateScript({
       userIdea,
       transcript,
-      visualAnalysis: videoAnalysis
+      visualAnalysis: videoAnalysis,
+      // NEW: Pass hints (these APPEND to master prompt, don't replace)
+      toneHint,
+      languageHint,
+      mode
     });
+    const scriptGenTimeMs = Date.now() - scriptGenStartTime;
     await job.updateProgress(75);
 
     const generationTimeMs = Date.now() - startTime;
@@ -141,33 +167,82 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
         reelUrl,
         userIdea,
         scriptText,
-        imageUrl,           // Now included!
+        imageUrl,
         generationTimeMs,
         modelVersion: 'gemini-2.5-flash'
       },
       { upsert: true, new: true }
     );
 
-    // E. Save to Dataset for ML training
+    // E. Save to Dataset for ML training (Enhanced schema v2.0)
+    const scriptSections = parseScriptSections(scriptText);
+    const analysisTimeMs = generationTimeMs - scriptGenTimeMs;
+    
     await DatasetEntry.create({
+      // INPUT FEATURES
       input: {
         videoUrl: reelUrl,
         userIdea,
+        requestHash,
+        
+        // User preferences (hints)
+        toneHint,
+        languageHint,
+        mode: mode || 'full',
+        
+        // Video analysis results
         transcript: transcript || undefined,
+        transcriptWordCount: countWords(transcript || undefined),
         visualCues: videoAnalysis?.visualCues || [],
         hookType: videoAnalysis?.hookType,
-        tone: videoAnalysis?.tone,
-        frameCount: videoAnalysis?.sceneDescriptions.length
+        detectedTone: videoAnalysis?.tone,
+        sceneDescriptions: videoAnalysis?.sceneDescriptions || [],
+        frameCount: frames?.length || 0
       },
+      
+      // OUTPUT FEATURES
       output: {
         generatedScript: scriptText,
-        scriptLengthChars: scriptText.length
+        scriptSections,
+        visualDirections: extractVisualLines(scriptText),
+        dialogueLines: extractDialogueLines(scriptText),
+        scriptLengthChars: scriptText.length,
+        estimatedSpokenDuration: estimateSpokenDuration(scriptText),
+        hookLengthChars: scriptSections.hook?.length || 0,
+        bodyLengthChars: scriptSections.body?.length || 0,
+        ctaLengthChars: scriptSections.cta?.length || 0
       },
-      metrics: {
-        generationTimeMs
+      
+      // FEEDBACK (defaults, updated later via feedback API)
+      feedback: {
+        wasAccepted: true,
+        sectionFeedback: {
+          hook: { wasRegenerated: false },
+          body: { wasRegenerated: false },
+          cta: { wasRegenerated: false }
+        }
       },
-      modelVersion: 'gemini-2.5-flash',
-      datasetVersion: '1.0.0'
+      
+      // GENERATION METADATA
+      generation: {
+        analysisModel: 'gemini-2.5-flash',
+        scriptModel: 'gemini-2.5-flash',
+        analysisTimeMs,
+        generationTimeMs: scriptGenTimeMs,
+        totalTimeMs: generationTimeMs,
+        analysisAttempts: 1,
+        generationAttempts: 1,
+        promptVersion: 'steal-artist-v2.0'
+      },
+      
+      // TRAINING FLAGS
+      training: {
+        isValidated: false,
+        qualityScore: 50, // Default, recomputed on feedback
+        includedInTraining: false,
+        datasetVersion: '2.0.0',
+        schemaVersion: '2.0.0'
+      }
     });
     await job.updateProgress(90);
 
@@ -202,12 +277,13 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     logger.error(`[${requestId}] Job failed:`, error);
 
     // Update job status to failed
+    // SECURITY: Don't store full stack traces in production (exposes internal paths)
     await Job.findOneAndUpdate(
       { jobId: requestId },
       {
         status: 'failed',
         error: error.message,
-        errorStack: error.stack,
+        errorStack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
         completedAt: new Date()
       }
     );

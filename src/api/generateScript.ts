@@ -36,7 +36,7 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
       });
     }
 
-    const { subscriber_id, reel_url, user_idea } = parseResult.data;
+    const { subscriber_id, reel_url, user_idea, tone_hint, language_hint, mode } = parseResult.data;
     const requestHash = generateRequestHash(subscriber_id, reel_url, user_idea);
 
     // 2. Idempotency Check (MongoDB)
@@ -77,13 +77,17 @@ export const generateScriptHandler = async (req: Request, res: Response) => {
       attempts: 0
     });
 
-    // 5. Add to BullMQ queue
+    // 5. Add to BullMQ queue (with optional hints)
+    // CLEANUP: Ensure empty strings or nulls are converted to undefined for Type safety
     await addScriptJob({
       requestId,
       requestHash,
       subscriberId: subscriber_id,
       reelUrl: reel_url,
-      userIdea: user_idea
+      userIdea: user_idea,
+      toneHint: tone_hint || undefined,
+      languageHint: language_hint || undefined,
+      mode
     });
 
     logger.info(`[${requestId}] Job queued for user ${subscriber_id}`);

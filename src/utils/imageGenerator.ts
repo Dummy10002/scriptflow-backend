@@ -20,28 +20,23 @@ const fontDataRegular = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppi
 // Clean, professional, high-readability
 // ============================================
 const COLORS = {
-  // Background
-  bgGradientStart: '#0F0F0F',      // True black
-  bgGradientEnd: '#1A1A1A',        // Slightly lighter
-
-  // Cards
-  cardBg: 'rgba(255,255,255,0.03)', // Very subtle
-  cardBorder: 'rgba(255,255,255,0.06)',
-
-  // Text
-  textPrimary: '#FFFFFF',           // Pure white for dialogue
-  textSecondary: '#9CA3AF',         // Muted gray for visuals
-
-  // Accents (muted, not neon)
-  visualAccent: '#6B7280',          // Cool gray for VISUAL
-  sayAccent: '#10B981',             // Emerald green for SAY
-  sectionHeader: '#6B7280',         // Gray headers
-
-  // Dividers
-  divider: 'rgba(255,255,255,0.06)',
-
-  // Watermark
-  watermark: '#4B5563'
+  // Minimalist Palette
+  bgDark: '#09090b',         // Zinc 950
+  bgSurface: '#18181b',      // Zinc 900
+  textMain: '#fafafa',       // Zinc 50
+  textDim: '#a1a1aa',        // Zinc 400
+  textMuted: '#52525b',      // Zinc 600
+  
+  // Refined Accents
+  accent: '#22d3ee',         // Cyan 400 (Soft Electric Cyan)
+  accentMuted: 'rgba(34, 211, 238, 0.1)',
+  border: 'rgba(255, 255, 255, 0.06)',
+  divider: 'rgba(255, 255, 255, 0.03)',
+  
+  // Section Glows
+  cardBg: 'rgba(24, 24, 27, 0.6)',
+  visualGlow: 'rgba(161, 161, 170, 0.03)',
+  sayGlow: 'rgba(34, 211, 238, 0.02)',
 };
 
 /**
@@ -74,29 +69,29 @@ function parseScript(scriptText: string): { hook: string[], body: string[], cta:
  * Format a line with proper styling based on type (VISUAL vs SAY)
  * IMPROVED: Cleaner design, better contrast, no neon colors
  */
-function formatLine(line: string, isLast: boolean = false): string {
+function formatLine(visual: string | null, say: string | null, isLast: boolean = false): string {
   const borderStyle = isLast ? '' : `border-bottom: 1px solid ${COLORS.divider};`;
   
-  // Check if it's a VISUAL line
-  if (line.includes('🎬') || line.toLowerCase().startsWith('visual:')) {
-    const content = line.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '');
-    return `<div style="display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; ${borderStyle}">
-      <span style="font-size: 10px; font-weight: 600; color: ${COLORS.visualAccent}; text-transform: uppercase; min-width: 52px; padding-top: 5px; letter-spacing: 0.5px;">VISUAL</span>
-      <span style="font-size: 16px; color: ${COLORS.textSecondary}; line-height: 1.6; font-style: italic;">${escapeHtml(content)}</span>
-    </div>`;
+  // Generic text fallback
+  if (!visual?.match(/🎬|VISUAL:/i) && !say?.match(/💬|SAY:/i) && visual) {
+    return `<div style="display: flex; padding: 24px; ${borderStyle} color: ${COLORS.textDim}; font-size: 15px; line-height: 1.6;">${escapeHtml(visual)}</div>`;
   }
-  
-  // Check if it's a SAY line
-  if (line.includes('💬') || line.toLowerCase().startsWith('say:')) {
-    const content = line.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '');
-    return `<div style="display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; ${borderStyle}">
-      <span style="font-size: 10px; font-weight: 600; color: ${COLORS.sayAccent}; text-transform: uppercase; min-width: 52px; padding-top: 5px; letter-spacing: 0.5px;">SAY</span>
-      <span style="font-size: 18px; font-weight: 500; color: ${COLORS.textPrimary}; line-height: 1.5;">${escapeHtml(content)}</span>
-    </div>`;
-  }
-  
-  // Default: regular line
-  return `<div style="font-size: 16px; color: ${COLORS.textSecondary}; line-height: 1.6; padding: 12px 0; ${borderStyle}">${escapeHtml(line)}</div>`;
+
+  return `<div style="display: flex; align-items: stretch; gap: 0; padding: 24px 0; ${borderStyle}">
+    <!-- Visual Side (40%) -->
+    <div style="display: flex; flex-direction: column; width: 400px; padding-right: 32px; border-right: 1px solid ${COLORS.divider};">
+      <div style="display: flex; font-size: 9px; font-weight: 700; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">VISUAL</div>
+      <div style="display: flex; font-size: 14px; color: ${COLORS.textDim}; line-height: 1.7; font-style: italic; opacity: 0.9;">${visual ? escapeHtml(visual.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '')) : '—'}</div>
+    </div>
+    
+    <!-- Dialogue Side (60%) -->
+    <div style="display: flex; flex-direction: column; flex: 1; padding-left: 40px; background: ${say ? COLORS.sayGlow : 'transparent'};">
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+        <span style="display: flex; font-size: 9px; font-weight: 800; color: ${COLORS.accent}; text-transform: uppercase; letter-spacing: 3px;">DIALOGUE</span>
+      </div>
+      <div style="display: flex; font-size: 22px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.4; letter-spacing: -0.4px;">${say ? escapeHtml(say.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '')) : '—'}</div>
+    </div>
+  </div>`;
 }
 
 function escapeHtml(text: string): string {
@@ -104,21 +99,48 @@ function escapeHtml(text: string): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '"') // Satori handles raw quotes better than &quot;
+    .replace(/'/g, "'");
 }
 
 /**
  * Create section header HTML (clean, no emojis, uppercase)
  */
 function createSectionHeader(title: string): string {
-  return `<div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: ${COLORS.sectionHeader}; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 1px solid ${COLORS.divider};">${title}</div>`;
+  return `<div style="display: flex; align-items: center; margin-bottom: 24px; gap: 16px;">
+    <div style="display: flex; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 4px; color: ${COLORS.textMuted};">${title}</div>
+    <div style="display: flex; flex: 1; height: 1px; background: ${COLORS.divider};"></div>
+  </div>`;
 }
 
 /**
- * Format all lines in a section
+ * Format all lines in a section (Pairing Visual + Say)
  */
 function formatSection(lines: string[]): string {
-  return lines.map((line, idx) => formatLine(line, idx === lines.length - 1)).join('\n');
+  const paired: { visual: string | null, say: string | null }[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const isVisual = line.includes('🎬') || line.toLowerCase().startsWith('visual:');
+    const isSay = line.includes('💬') || line.toLowerCase().startsWith('say:');
+    
+    if (isVisual) {
+      // Look ahead for a matching SAY
+      const nextLine = lines[i + 1];
+      if (nextLine && (nextLine.includes('💬') || nextLine.toLowerCase().startsWith('say:'))) {
+        paired.push({ visual: line, say: nextLine });
+        i++; // skip next
+      } else {
+        paired.push({ visual: line, say: null });
+      }
+    } else if (isSay) {
+      paired.push({ visual: null, say: line });
+    } else {
+      paired.push({ visual: line, say: null });
+    }
+  }
+  
+  return paired.map((pair, idx) => formatLine(pair.visual, pair.say, idx === paired.length - 1)).join('\n');
 }
 
 export async function generateScriptImage(scriptText: string): Promise<string> {
@@ -133,32 +155,54 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     const ctaHtml = formatSection(sections.cta);
 
     const template = html(`
-      <div style="display: flex; flex-direction: column; width: 1080px; padding: 56px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgGradientStart} 0%, ${COLORS.bgGradientEnd} 100%); color: ${COLORS.textPrimary};">
+      <div style="display: flex; flex-direction: column; width: 1080px; padding: 64px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
         
+        <!-- Minimalist Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 48px; border-bottom: 1px solid ${COLORS.divider}; padding-bottom: 32px;">
+          <div style="display: flex; flex-direction: column;">
+            <div style="display: flex; font-size: 32px; font-weight: 800; color: ${COLORS.textMain}; letter-spacing: -1.5px;">SCRIPT<span style="color: ${COLORS.accent};">FLOW</span></div>
+            <div style="display: flex; font-size: 11px; color: ${COLORS.textMuted}; font-weight: 600; text-transform: uppercase; letter-spacing: 5px; margin-top: 4px;">Studio Blueprint</div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <div style="display: flex; font-size: 10px; font-weight: 700; color: ${COLORS.textMuted}; letter-spacing: 2px;">V2.5.0</div>
+            <div style="display: flex; width: 6px; height: 6px; border-radius: 50%; background: ${COLORS.accent};"></div>
+          </div>
+        </div>
+
+        <!-- Compact Content Sections -->
         ${hookHtml ? `
-        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
-          ${createSectionHeader('HOOK')}
-          ${hookHtml}
+        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 32px;">
+          ${createSectionHeader('01 / HOOK')}
+          <div style="display: flex; flex-direction: column;">
+            ${hookHtml}
+          </div>
         </div>` : ''}
 
         ${bodyHtml ? `
-        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
-          ${createSectionHeader('BODY')}
-          ${bodyHtml}
+        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 32px;">
+          ${createSectionHeader('02 / SCENE BREAKDOWN')}
+          <div style="display: flex; flex-direction: column;">
+            ${bodyHtml}
+          </div>
         </div>` : ''}
 
         ${ctaHtml ? `
-        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
-          ${createSectionHeader('CALL TO ACTION')}
-          ${ctaHtml}
+        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 32px;">
+          ${createSectionHeader('03 / CALL TO ACTION')}
+          <div style="display: flex; flex-direction: column;">
+            ${ctaHtml}
+          </div>
         </div>` : ''}
 
-        ${!hookHtml && !bodyHtml && !ctaHtml ? `
-        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
-          <div style="font-size: 18px; color: ${COLORS.textSecondary}; line-height: 1.6;">${escapeHtml(scriptText)}</div>
-        </div>` : ''}
+        <!-- Attractive Footer -->
+        <div style="display: flex; justify-content: center; margin-top: 56px;">
+          <div style="display: flex; align-items: center; gap: 16px; opacity: 0.2;">
+            <div style="display: flex; height: 1px; width: 40px; background: ${COLORS.textMuted};"></div>
+            <div style="display: flex; font-size: 11px; font-weight: 600; color: ${COLORS.textMuted}; letter-spacing: 6px;">PRODUCTION BLUEPRINT V2.5.2 INT-HINT</div>
+            <div style="display: flex; height: 1px; width: 40px; background: ${COLORS.textMuted};"></div>
+          </div>
+        </div>
 
-        <div style="display: flex; justify-content: center; margin-top: 24px; font-size: 11px; color: ${COLORS.watermark}; letter-spacing: 1px;">SCRIPTFLOW AI</div>
       </div>
     `);
 
