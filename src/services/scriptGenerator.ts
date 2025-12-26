@@ -1,14 +1,105 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logger } from '../utils/logger';
 import { VideoAnalysis } from './videoAnalyzer';
+import { config } from '../config';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
+
+// ============================================
+// Types
+// ============================================
+
+export type ToneHint = 'professional' | 'funny' | 'provocative' | 'educational' | 'casual';
+export type GenerationMode = 'full' | 'hook_only';
 
 export interface ScriptGeneratorOptions {
   userIdea: string;
   transcript: string | null;
-  visualAnalysis?: VideoAnalysis | null;  // Enhanced visual context
+  visualAnalysis?: VideoAnalysis | null;
+  
+  // NEW: Optional hints (work WITH video DNA, not override)
+  toneHint?: ToneHint;
+  languageHint?: string;
+  mode?: GenerationMode;
 }
+
+// ============================================
+// Hint Builder (APPENDED to prompt, not replacing)
+// ============================================
+
+/**
+ * Build optional hints section
+ * These are GENTLE suggestions that work WITH the video's DNA
+ * The video's original style is ALWAYS primary
+ */
+function buildOptionalHints(options: ScriptGeneratorOptions): string {
+  const hints: string[] = [];
+  
+  if (options.toneHint) {
+    const toneDescriptions: Record<ToneHint, string> = {
+      professional: 'business-focused and authoritative',
+      funny: 'humorous and witty with clever wordplay',
+      provocative: 'edgy and attention-grabbing',
+      educational: 'informative and teaching-focused',
+      casual: 'friendly and conversational'
+    };
+    
+    hints.push(`
+TONE PREFERENCE (subtle adjustment, preserve video's original energy):
+The user prefers a "${options.toneHint}" feel (${toneDescriptions[options.toneHint]}). 
+Apply this GENTLY while keeping the reference video's authentic style as the PRIMARY influence.
+Do NOT completely change the tone - just lean slightly in this direction.`);
+  }
+  
+  if (options.languageHint) {
+    hints.push(`
+LANGUAGE REQUIREMENT (STRICT):
+Write ALL spoken dialogue (💬 SAY:) in ${options.languageHint} language.
+
+CRITICAL RULES:
+1. Use ONLY English/Roman alphabet (ABC...) - NEVER use native scripts like देवनागरी, ಕನ್ನಡ, தமிழ், etc.
+2. Write words as they would be SPOKEN and ROMANIZED (transliterated)
+3. Examples of correct romanization:
+   - Kannada: "Yenu maadtha idira?" NOT "ಏನು ಮಾಡ್ತಾ ಇದೀರಾ?"
+   - Hindi: "Kya kar rahe ho?" NOT "क्या कर रहे हो?"
+   - Tamil: "Enna panringa?" NOT "என்ன பண்றீங்க?"
+   - Telugu: "Emi chestunnaru?" NOT "ఏమి చేస్తున్నారు?"
+4. Use natural ${options.languageHint} phrases, idioms, and expressions
+5. Keep technical/English terms as-is if that's natural for the topic
+
+The output MUST be readable by someone who can only read English alphabet.`);
+  }
+  
+  if (options.mode === 'hook_only') {
+    hints.push(`
+MODE: HOOK ONLY
+Generate ONLY the [HOOK] section. Skip [BODY] and [CTA] entirely.
+Make the hook extra impactful since it's standalone.
+Still follow all other formatting rules for the hook.`);
+  }
+  
+  if (hints.length === 0) return '';
+  
+  // Always add visual guidance reminder for better shooting instructions
+  hints.push(`
+VISUAL DIRECTION REMINDER:
+For each 🎬 VISUAL: line, be EXTREMELY SPECIFIC about:
+- Exact camera angle (e.g., "Close-up face shot, slightly above eye level")
+- Hand gestures (e.g., "Right hand counting on fingers, palm facing camera")
+- Body language (e.g., "Lean forward slightly with confident posture")
+- Text overlays (e.g., "Text appears top-center: 'THE 3 SECRETS'")
+
+The creator should be able to shoot the video EXACTLY as described without guessing.`);
+  
+  return `
+
+--- OPTIONAL USER PREFERENCES (Apply subtly, video DNA is primary) ---
+${hints.join('\n')}`;
+}
+
+// ============================================
+// Main Generator (Master Prompt UNCHANGED)
+// ============================================
 
 /**
  * Generate a script using the "Steal Like an Artist" framework.
@@ -23,21 +114,20 @@ export async function generateScript(
   transcript?: string | null
 ): Promise<string> {
   // Handle both old and new signatures for backwards compatibility
-  let userIdea: string;
-  let transcriptText: string | null;
-  let visualAnalysis: VideoAnalysis | null | undefined;
-
+  let options: ScriptGeneratorOptions;
+  
   if (typeof optionsOrIdea === 'string') {
     // Legacy signature: generateScript(userIdea, transcript)
-    userIdea = optionsOrIdea;
-    transcriptText = transcript ?? null;
-    visualAnalysis = null;
+    options = {
+      userIdea: optionsOrIdea,
+      transcript: transcript ?? null,
+      visualAnalysis: null
+    };
   } else {
-    // New signature: generateScript(options)
-    userIdea = optionsOrIdea.userIdea;
-    transcriptText = optionsOrIdea.transcript;
-    visualAnalysis = optionsOrIdea.visualAnalysis;
+    options = optionsOrIdea;
   }
+
+  const { userIdea, transcript: transcriptText, visualAnalysis } = options;
 
   // Build reference DNA section - now includes visual context if available
   let referenceDNA = '';
@@ -65,7 +155,10 @@ export async function generateScript(
     referenceDNA = 'No reference provided. Use an intense, strategic tone.';
   }
 
-  const prompt = `
+  // ============================================
+  // MASTER PROMPT - UNCHANGED
+  // ============================================
+  const masterPrompt = `
   Apply the "Steal Like an Artist" framework to generate a new script.
 
   REFERENCE DNA (The Source to Steal From):
@@ -105,6 +198,10 @@ export async function generateScript(
 
   Return ONLY the structured script with [HOOK], [BODY], [CTA] headers and 🎬 VISUAL: / 💬 SAY: lines. No other text.`;
 
+  // Append optional hints (if any) WITHOUT modifying master prompt
+  const optionalHints = buildOptionalHints(options);
+  const fullPrompt = masterPrompt + optionalHints;
+
   // Model configuration with fallback hierarchy
   const MODEL_HIERARCHY = [
     'gemini-2.5-flash',      // Primary (User requested)
@@ -118,7 +215,7 @@ export async function generateScript(
 
   for (const modelName of MODEL_HIERARCHY) {
     try {
-      logger.info(`Generating script with model: ${modelName}`);
+      logger.info(`Generating script with model: ${modelName}${options.toneHint ? ` (tone hint: ${options.toneHint})` : ''}${options.mode === 'hook_only' ? ' (hook only)' : ''}`);
       
       const model = genAI.getGenerativeModel({ 
         model: modelName, 
@@ -136,7 +233,7 @@ export async function generateScript(
         - Vocabulary: Use technical authority words (e.g., if UI/UX, use terms like 'visual hierarchy', '8pt grid', 'cognitive friction').`
       });
 
-      const result = await model.generateContent(prompt);
+      const result = await model.generateContent(fullPrompt);
       const script = result.response.text();
       return script.trim();
 
@@ -157,3 +254,4 @@ export async function generateScript(
   logger.error('All script generation models failed.');
   throw lastError || new Error('Script generation failed');
 }
+

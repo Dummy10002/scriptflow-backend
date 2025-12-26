@@ -10,9 +10,39 @@ import { config } from '../config';
 
 const IMGBB_API_KEY = config.IMGBB_API_KEY;
 
-// Load fonts once
-const fontData = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Inter-Bold.ttf'));
-const fontDataRegular = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Inter-Regular.ttf'));
+// Load fonts once (Poppins - universal, modern, excellent readability)
+const fontDataBold = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-Bold.ttf'));
+const fontDataSemiBold = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-SemiBold.ttf'));
+const fontDataRegular = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'));
+
+// ============================================
+// IMPROVED MINIMALIST DARK PALETTE
+// Clean, professional, high-readability
+// ============================================
+const COLORS = {
+  // Background
+  bgGradientStart: '#0F0F0F',      // True black
+  bgGradientEnd: '#1A1A1A',        // Slightly lighter
+
+  // Cards
+  cardBg: 'rgba(255,255,255,0.03)', // Very subtle
+  cardBorder: 'rgba(255,255,255,0.06)',
+
+  // Text
+  textPrimary: '#FFFFFF',           // Pure white for dialogue
+  textSecondary: '#9CA3AF',         // Muted gray for visuals
+
+  // Accents (muted, not neon)
+  visualAccent: '#6B7280',          // Cool gray for VISUAL
+  sayAccent: '#10B981',             // Emerald green for SAY
+  sectionHeader: '#6B7280',         // Gray headers
+
+  // Dividers
+  divider: 'rgba(255,255,255,0.06)',
+
+  // Watermark
+  watermark: '#4B5563'
+};
 
 /**
  * Parse script into structured sections with VISUAL/SAY lines
@@ -42,30 +72,31 @@ function parseScript(scriptText: string): { hook: string[], body: string[], cta:
 
 /**
  * Format a line with proper styling based on type (VISUAL vs SAY)
+ * IMPROVED: Cleaner design, better contrast, no neon colors
  */
-function formatLine(line: string): string {
+function formatLine(line: string, isLast: boolean = false): string {
+  const borderStyle = isLast ? '' : `border-bottom: 1px solid ${COLORS.divider};`;
+  
   // Check if it's a VISUAL line
   if (line.includes('🎬') || line.toLowerCase().startsWith('visual:')) {
     const content = line.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '');
-    return `<div style="display: flex; align-items: flex-start; gap: 10px; background: rgba(100,100,100,0.2); padding: 15px 20px; border-radius: 10px; margin-bottom: 12px; border-left: 4px solid #888; width: 100%;">
-      <span style="font-size: 20px;">🎬</span>
-      <span style="font-size: 12px; font-weight: 700; color: #aaa; text-transform: uppercase; min-width: 60px;">VISUAL:</span>
-      <span style="font-size: 18px; font-style: italic; color: #ccc; line-height: 1.5;">${escapeHtml(content)}</span>
+    return `<div style="display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; ${borderStyle}">
+      <span style="font-size: 10px; font-weight: 600; color: ${COLORS.visualAccent}; text-transform: uppercase; min-width: 52px; padding-top: 5px; letter-spacing: 0.5px;">VISUAL</span>
+      <span style="font-size: 16px; color: ${COLORS.textSecondary}; line-height: 1.6; font-style: italic;">${escapeHtml(content)}</span>
     </div>`;
   }
   
   // Check if it's a SAY line
   if (line.includes('💬') || line.toLowerCase().startsWith('say:')) {
     const content = line.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '');
-    return `<div style="display: flex; align-items: flex-start; gap: 10px; background: rgba(100,255,218,0.1); padding: 15px 20px; border-radius: 10px; margin-bottom: 12px; border-left: 4px solid #64ffda; width: 100%;">
-      <span style="font-size: 20px;">💬</span>
-      <span style="font-size: 12px; font-weight: 700; color: #64ffda; text-transform: uppercase; min-width: 60px;">SAY:</span>
-      <span style="font-size: 22px; font-weight: 600; color: #fff; line-height: 1.5;">${escapeHtml(content)}</span>
+    return `<div style="display: flex; align-items: flex-start; gap: 16px; padding: 16px 0; ${borderStyle}">
+      <span style="font-size: 10px; font-weight: 600; color: ${COLORS.sayAccent}; text-transform: uppercase; min-width: 52px; padding-top: 5px; letter-spacing: 0.5px;">SAY</span>
+      <span style="font-size: 18px; font-weight: 500; color: ${COLORS.textPrimary}; line-height: 1.5;">${escapeHtml(content)}</span>
     </div>`;
   }
   
   // Default: regular line
-  return `<div style="font-size: 20px; color: #ddd; line-height: 1.6; margin-bottom: 10px;">${escapeHtml(line)}</div>`;
+  return `<div style="font-size: 16px; color: ${COLORS.textSecondary}; line-height: 1.6; padding: 12px 0; ${borderStyle}">${escapeHtml(line)}</div>`;
 }
 
 function escapeHtml(text: string): string {
@@ -76,6 +107,20 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Create section header HTML (clean, no emojis, uppercase)
+ */
+function createSectionHeader(title: string): string {
+  return `<div style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: ${COLORS.sectionHeader}; margin-bottom: 8px; padding-bottom: 12px; border-bottom: 1px solid ${COLORS.divider};">${title}</div>`;
+}
+
+/**
+ * Format all lines in a section
+ */
+function formatSection(lines: string[]): string {
+  return lines.map((line, idx) => formatLine(line, idx === lines.length - 1)).join('\n');
+}
+
 export async function generateScriptImage(scriptText: string): Promise<string> {
   const startTime = Date.now();
   try {
@@ -83,37 +128,37 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     const sections = parseScript(scriptText);
     
     // Build HTML for each section
-    const hookHtml = sections.hook.map(formatLine).join('\n');
-    const bodyHtml = sections.body.map(formatLine).join('\n');
-    const ctaHtml = sections.cta.map(formatLine).join('\n');
+    const hookHtml = formatSection(sections.hook);
+    const bodyHtml = formatSection(sections.body);
+    const ctaHtml = formatSection(sections.cta);
 
     const template = html(`
-      <div style="display: flex; flex-direction: column; width: 1080px; padding: 60px; font-family: 'Inter'; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #fff;">
+      <div style="display: flex; flex-direction: column; width: 1080px; padding: 56px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgGradientStart} 0%, ${COLORS.bgGradientEnd} 100%); color: ${COLORS.textPrimary};">
         
         ${hookHtml ? `
-        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 30px;">
-          <div style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: #64ffda; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid rgba(100,255,218,0.3);">🎯 HOOK</div>
+        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
+          ${createSectionHeader('HOOK')}
           ${hookHtml}
         </div>` : ''}
 
         ${bodyHtml ? `
-        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 30px;">
-          <div style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: #64ffda; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid rgba(100,255,218,0.3);">📝 BODY</div>
+        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
+          ${createSectionHeader('BODY')}
           ${bodyHtml}
         </div>` : ''}
 
         ${ctaHtml ? `
-        <div style="display: flex; flex-direction: column; background: rgba(100,255,218,0.05); border: 2px solid rgba(100,255,218,0.5); border-radius: 16px; padding: 30px;">
-          <div style="font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; color: #64ffda; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid rgba(100,255,218,0.3);">🚀 CTA</div>
+        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
+          ${createSectionHeader('CALL TO ACTION')}
           ${ctaHtml}
         </div>` : ''}
 
         ${!hookHtml && !bodyHtml && !ctaHtml ? `
-        <div style="display: flex; flex-direction: column; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 30px;">
-          <div style="font-size: 20px; color: #ddd; line-height: 1.6;">${escapeHtml(scriptText)}</div>
+        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 12px; padding: 24px;">
+          <div style="font-size: 18px; color: ${COLORS.textSecondary}; line-height: 1.6;">${escapeHtml(scriptText)}</div>
         </div>` : ''}
 
-        <div style="display: flex; justify-content: center; margin-top: 30px; font-size: 14px; color: #666;">Generated by ScriptFlow AI</div>
+        <div style="display: flex; justify-content: center; margin-top: 24px; font-size: 11px; color: ${COLORS.watermark}; letter-spacing: 1px;">SCRIPTFLOW AI</div>
       </div>
     `);
 
@@ -122,14 +167,20 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
       width: 1080,
       fonts: [
         {
-          name: 'Inter',
+          name: 'Poppins',
           data: fontDataRegular,
           weight: 400,
           style: 'normal',
         },
         {
-          name: 'Inter',
-          data: fontData,
+          name: 'Poppins',
+          data: fontDataSemiBold,
+          weight: 600,
+          style: 'normal',
+        },
+        {
+          name: 'Poppins',
+          data: fontDataBold,
           weight: 700,
           style: 'normal',
         },
@@ -161,6 +212,7 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
         headers: {
           ...formData.getHeaders(),
         },
+        timeout: 30000  // 30 second timeout
       }
     );
 
@@ -174,7 +226,6 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
 
   } catch (error: any) {
     logger.error('Failed to generate or upload image: ' + (error.message || error));
-    // Fail gracefully? No, we need the image.
     throw error;
   }
 }
