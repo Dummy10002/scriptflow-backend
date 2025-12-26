@@ -13,6 +13,7 @@ import { generateScript } from '../services/scriptGenerator';
 import { cleanupFiles } from '../services/cleanup';
 import { sendToManyChat } from '../services/manychat';
 import { generateScriptImage } from '../utils/imageGenerator';
+import { generateUniquePublicId, buildScriptUrl } from '../api/viewScript';
 
 // Database
 import { Script, Job } from '../db/models';
@@ -158,16 +159,23 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     const imageUrl = await generateScriptImage(scriptText);
     await job.updateProgress(80);
 
-    // E. Save to MongoDB (Script collection) - including imageUrl
+    // D2. Generate public ID for copy-friendly link (collision-safe)
+    const publicId = await generateUniquePublicId();
+    const scriptUrl = buildScriptUrl(publicId);
+    logger.info(`[${requestId}] Script URL: ${scriptUrl}`);
+
+    // E. Save to MongoDB (Script collection) - including imageUrl and scriptUrl
     await Script.findOneAndUpdate(
       { requestHash },
       {
         requestHash,
+        publicId,
         manychatUserId: subscriberId,
         reelUrl,
         userIdea,
         scriptText,
         imageUrl,
+        scriptUrl,
         generationTimeMs,
         modelVersion: 'gemini-2.5-flash'
       },
@@ -246,11 +254,12 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     });
     await job.updateProgress(90);
 
-    // G. Send to ManyChat
+    // G. Send to ManyChat (with copy-friendly link)
     await sendToManyChat({
       subscriber_id: subscriberId,
       field_name: 'script_image_url',
-      field_value: imageUrl
+      field_value: imageUrl,
+      scriptUrl  // NEW: Include copy-friendly URL
     });
 
     // G. Update job status

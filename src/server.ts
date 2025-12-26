@@ -4,6 +4,7 @@ import { generateScriptHandler } from './api/generateScript';
 import { healthHandler, detailedHealthHandler } from './api/health';
 import { exportDatasetHandler } from './api/dataset';
 import { submitFeedbackHandler, getFeedbackStatsHandler } from './api/feedback';
+import { viewScriptHandler } from './api/viewScript';
 import { logger } from './utils/logger';
 import { config } from './config';
 import {
@@ -78,6 +79,11 @@ export function createServer() {
   // Health checks (no rate limit)
   app.get('/health', healthHandler);
   app.get('/health/detailed', detailedHealthHandler);
+  
+  // Public script viewing page (copy-friendly)
+  // Short URL: /s/:publicId
+  // Rate limited: 60 requests per minute per IP (generous for normal use)
+  app.get('/s/:publicId', rateLimiter, viewScriptHandler);
   
   // Main API endpoint with ACCESS CONTROL
   // 1. betaAccessControl - Only first 100 users, others on waitlist

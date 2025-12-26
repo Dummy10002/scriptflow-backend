@@ -6,11 +6,13 @@ import mongoose, { Schema, Document } from 'mongoose';
  */
 export interface IScript extends Document {
   requestHash: string;
+  publicId: string;         // Short ID for shareable link (e.g., "XyZ123")
   manychatUserId: string;
   reelUrl: string;
   userIdea: string;
   scriptText: string;
   imageUrl?: string;        // Generated script image URL
+  scriptUrl?: string;       // Public URL for copy-friendly text view
   // ML-relevant metadata
   modelVersion?: string;
   generationTimeMs?: number;
@@ -25,6 +27,12 @@ const ScriptSchema = new Schema<IScript>({
     required: true, 
     unique: true, 
     index: true 
+  },
+  publicId: {
+    type: String,
+    unique: true,
+    sparse: true,  // Allow null/undefined (backward compatibility)
+    index: true
   },
   manychatUserId: { 
     type: String, 
@@ -46,6 +54,9 @@ const ScriptSchema = new Schema<IScript>({
   imageUrl: {
     type: String
   },
+  scriptUrl: {
+    type: String
+  },
   modelVersion: { 
     type: String, 
     default: 'gemini-2.5-flash' 
@@ -62,10 +73,7 @@ const ScriptSchema = new Schema<IScript>({
   timestamps: true // Automatically adds createdAt and updatedAt
 });
 
-// Index for idempotency check (most common query)
-ScriptSchema.index({ requestHash: 1 });
-
-// Index for user history queries
+// Index for user history queries (compound for high performance)
 ScriptSchema.index({ manychatUserId: 1, createdAt: -1 });
 
 export const Script = mongoose.model<IScript>('Script', ScriptSchema);

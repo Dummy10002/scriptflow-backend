@@ -254,9 +254,6 @@ DatasetEntrySchema.index({ 'training.isValidated': 1, 'training.includedInTraini
 DatasetEntrySchema.index({ 'training.qualityScore': -1 });
 DatasetEntrySchema.index({ 'feedback.overallRating': -1 });
 
-// For feedback lookup
-DatasetEntrySchema.index({ 'input.requestHash': 1 });
-
 // For time-based queries
 DatasetEntrySchema.index({ createdAt: -1 });
 

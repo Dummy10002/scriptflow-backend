@@ -40,6 +40,9 @@ export const config = cleanEnv(process.env, {
   // Security (optional)
   ADMIN_API_KEY: str({ desc: 'API key for admin endpoints', default: '' }),
   
+  // Public URLs
+  BASE_URL: str({ desc: 'Base URL for public links (e.g., https://yourapp.onrender.com)', default: '' }),
+  
   // Analysis
   ANALYSIS_MODE: str({ choices: ['audio', 'frames', 'hybrid'], default: 'hybrid' }),
 });
