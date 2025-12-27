@@ -1,10 +1,14 @@
-import YtDlpWrap from 'yt-dlp-exec';
+import ytDlpExec from 'yt-dlp-exec';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger';
 
 // Max duration to process (to avoid huge files)
 const MAX_DURATION_SEC = 300; // 5 minutes
+
+// Fixed paths for Docker deployment
+const COOKIES_PATH = '/app/instagram_cookies.txt';
+const YTDLP_BINARY_PATH = '/usr/local/bin/yt-dlp';
 
 /**
  * Sanitize ID to prevent path traversal attacks
@@ -38,17 +42,16 @@ export async function downloadReel(url: string, id: string): Promise<string> {
       noPlaylist: true,
     };
 
-    // Add cookies if configured (required for Instagram authentication)
-    const cookiesPath = process.env.INSTAGRAM_COOKIES_PATH;
-    if (cookiesPath && fs.existsSync(cookiesPath)) {
-      ytDlpOptions.cookies = cookiesPath;
-      logger.info(`Using Instagram cookies from: ${cookiesPath}`);
-    } else if (cookiesPath) {
-      logger.warn(`Cookies path configured but file not found: ${cookiesPath}`);
+    // Add cookies if available (required for Instagram authentication)
+    if (fs.existsSync(COOKIES_PATH)) {
+      ytDlpOptions.cookies = COOKIES_PATH;
+      logger.info(`Using Instagram cookies from: ${COOKIES_PATH}`);
+    } else {
+      logger.warn(`Cookies file not found at: ${COOKIES_PATH} - Instagram downloads may fail`);
     }
 
-    // Force mp4 for compatibility
-    await YtDlpWrap(url, ytDlpOptions);
+    // Execute yt-dlp with custom binary path
+    await ytDlpExec(url, ytDlpOptions, { execPath: YTDLP_BINARY_PATH });
 
     // Check if file exists
     if (!fs.existsSync(outputPath)) {
