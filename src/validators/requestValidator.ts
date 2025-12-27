@@ -5,6 +5,24 @@ import { z } from 'zod';
  * SECURITY: Strict validation prevents injection attacks and abuse
  */
 
+// ============================================
+// ManyChat Preprocessor Helper
+// Converts unreplaced {{...}} placeholders to undefined
+// This allows graceful fallback when custom fields aren't set
+// ============================================
+const manyChatPreprocess = <T>(schema: z.ZodType<T>) => 
+  z.preprocess((val) => {
+    // If it's a string that looks like an unreplaced ManyChat variable, treat as undefined
+    if (typeof val === 'string' && val.startsWith('{{') && val.endsWith('}}')) {
+      return undefined;
+    }
+    // If it's an empty string, treat as undefined for optional fields
+    if (val === '') {
+      return undefined;
+    }
+    return val;
+  }, schema);
+
 // Helper to validate Instagram URL properly
 const instagramReelUrlSchema = z.string()
   .url("Invalid URL format")
@@ -26,7 +44,8 @@ const instagramReelUrlSchema = z.string()
   });
 
 // Subscriber ID validation (ManyChat IDs are numeric)
-const subscriberIdSchema = z.string()
+// Using z.coerce.string() to accept both string and number inputs
+const subscriberIdSchema = z.coerce.string()
   .min(1, "Subscriber ID is required")
   .max(50, "Invalid subscriber ID")
   .refine((id) => /^[0-9]+$/.test(id), {
@@ -45,31 +64,37 @@ const userIdeaSchema = z.string()
 // ============================================
 // NEW: Optional hint parameters
 // These are HINTS that work WITH video DNA, not overrides
+// Wrapped with manyChatPreprocess to handle unreplaced {{...}} variables
 // ============================================
 
 // Tone HINT - subtle preference, video's style is primary
-const toneHintSchema = z.enum([
-  'professional',
-  'funny',
-  'provocative',
-  'educational',
-  'casual'
-]).nullable().or(z.literal('')).optional();
+const toneHintSchema = manyChatPreprocess(
+  z.enum([
+    'professional',
+    'funny',
+    'provocative',
+    'educational',
+    'casual'
+  ]).optional()
+);
 
-const languageHintSchema = z.string()
-  .max(50)
-  .nullable()
-  .or(z.literal(''))
-  .optional()
-  .refine((val) => !val || /^[a-zA-Z\s]+$/.test(val), {
-    message: "Language must contain only letters"
-  });
+// Language HINT - user's preferred language
+const languageHintSchema = manyChatPreprocess(
+  z.string()
+    .max(50)
+    .refine((val) => !val || /^[a-zA-Z\s]+$/.test(val), {
+      message: "Language must contain only letters"
+    })
+    .optional()
+);
 
 // Generation mode
-const modeSchema = z.enum([
-  'full',       // Generate full script (HOOK + BODY + CTA)
-  'hook_only'   // Generate only the hook for quick testing
-]).optional().default('full');
+const modeSchema = manyChatPreprocess(
+  z.enum([
+    'full',       // Generate full script (HOOK + BODY + CTA)
+    'hook_only'   // Generate only the hook for quick testing
+  ]).optional().default('full')
+);
 
 // ============================================
 // Main schema
