@@ -32,23 +32,11 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
   try {
     logger.info(`Sending to ManyChat. Subscriber: ${payload.subscriber_id}`);
 
-    // 1. Update Custom Fields (ALWAYS DONE)
+    // 1. Update Custom Fields
     const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
     
-    // Update Image URL Field
-    const imageFieldId = config.MANYCHAT_SCRIPT_FIELD_ID || payload.field_name;
-    if (imageFieldId) {
-      await axios.post(setFieldUrl, {
-        subscriber_id: subscriberIdInt,
-        field_id: parseInt(imageFieldId, 10),
-        field_value: payload.field_value
-      }, {
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        timeout: API_TIMEOUT_MS
-      });
-    }
-
-    // Update Copy URL Field (NEW)
+    // [OPTIMIZATION] Update Copy URL Field FIRST
+    // We do this before the image trigger so the link is ready when the automation starts.
     if (payload.scriptUrl && config.MANYCHAT_COPY_FIELD_ID) {
       await axios.post(setFieldUrl, {
         subscriber_id: subscriberIdInt,
@@ -59,6 +47,20 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
         timeout: API_TIMEOUT_MS
       });
       logger.info(`Updated script_copy_url field for ${payload.subscriber_id}`);
+    }
+
+    // Update Image URL Field (THE TRIGGER)
+    // This is done LAST because it triggers the "Custom Field Changed" rule in ManyChat.
+    const imageFieldId = config.MANYCHAT_SCRIPT_FIELD_ID || payload.field_name;
+    if (imageFieldId) {
+      await axios.post(setFieldUrl, {
+        subscriber_id: subscriberIdInt,
+        field_id: parseInt(imageFieldId, 10),
+        field_value: payload.field_value
+      }, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: API_TIMEOUT_MS
+      });
     }
 
     // 2. Direct Messaging (CONTROLLABLE BY CONFIG)
