@@ -1,69 +1,290 @@
-# Connecting ScriptFlow to ManyChat
+# ManyChat Integration Manual - ScriptFlow v3.0
 
-This guide explains how to connect your deployed backend to a ManyChat Flow using the **External Request** action.
+## Overview
 
-## Prerequisites
-1. Your **Render URL** from the deployment step (e.g., `https://scriptflow-backend.onrender.com`).
-2. Two Custom Fields in ManyChat to store user inputs:
-   *   User Field: `User_Idea` (Type: Text)
-   *   User Field: `User_Reel_Url` (Type: Text)
-3. One Custom Field to store the result:
-   *   User Field: `AI_Script_Result` (Type: Text)
+This guide covers how to set up ManyChat for ScriptFlow, including:
+- **Copy-friendly script links** – Users can tap to copy the full script text on mobile
+- **Two-tier caching** – Saves ~80% AI costs by reusing video analysis for the same reel
+- **Tone/Language hints** – Optional parameters to customize script style
 
 ---
 
-## Step 1: The Flow Setup
-1. **Get User Input**: Create a flow that asks the user for their Idea and the Reel URL. Save these into the custom fields mentioned above (`User_Idea` and `User_Reel_Url`).
-2. **Action Block**: After collecting inputs, add an **Action** block.
+## 🔧 Required Setup
 
-## Step 2: Configure External Request
-1. Click on the Action block and select **External Request**.
-2. **Request Type**: `POST`
-3. **Request URL**: `https://YOUR_RENDER_URL/api/v1/script/generate` (Replace `YOUR_RENDER_URL` with your actual domain).
-4. **Headers**:
-   *   Key: `Content-Type`
-   *   Value: `application/json`
+### 1. Get Your ManyChat API Key
 
-## Step 3: Configure the Body
-Click on the **Body** tab and select **Raw JSON**. Paste this exact structure:
+1. Go to **ManyChat** → **Settings** → **API**
+2. Copy your **API Key**
+3. Add it to your `.env` file:
+   ```env
+   MANYCHAT_API_KEY=your_api_key_here
+   ```
+
+### 2. Create Custom Fields
+
+You need **one custom field** to store the script image URL.
+
+1. Go to **Settings** → **Custom Fields**
+2. Click **+ New Field**
+3. Create this field:
+
+| Field Name | Type | Description |
+|------------|------|-------------|
+| `script_image_url` | Text | Stores the generated script image URL |
+
+4. Copy the **Field ID** (shown in URL or field settings)
+5. Add it to your `.env` file:
+   ```env
+   MANYCHAT_SCRIPT_FIELD_ID=12345678
+   ```
+
+### 3. Set Your Base URL (NEW - Required for Copy Feature)
+
+The copy-friendly link feature requires your production URL:
+
+```env
+BASE_URL=https://your-app.onrender.com
+```
+
+**Example URLs by platform:**
+- Render: `https://scriptflow-backend.onrender.com`
+- Railway: `https://scriptflow.up.railway.app`
+- Local dev: `http://localhost:3000`
+
+---
+
+## 📱 Flow Configuration
+
+### Basic Flow Structure
+
+```
+User sends Reel URL
+    ↓
+[Trigger: User Input]
+    ↓
+[Action: Set Custom Field] → Set "user_reel_url"
+    ↓
+[Action: External Request] → POST to ScriptFlow API
+    ↓
+[Action: Send Text] → "Analyzing your reel... Please wait!"
+    ↓
+(Backend sends image + link automatically)
+```
+
+---
+
+## 🔌 API Integration
+
+### Endpoint
+
+```
+POST https://your-app.onrender.com/api/v1/script/generate
+```
+
+### Headers
+
+| Header | Value |
+|--------|-------|
+| Content-Type | application/json |
+
+### Request Body
 
 ```json
 {
-  "manychat_user_id": "{{id}}",
-  "reel_url": "{{User_Reel_Url}}",
-  "user_idea": "{{User_Idea}}"
+  "subscriber_id": "{{subscriber_id}}",
+  "reel_url": "{{user_reel_url}}",
+  "user_idea": "{{user_idea}}"
 }
 ```
 
-*Note: `{{id}}` is a system field in ManyChat that automatically sends the user's ID. `{{User_Reel_Url}}` and `{{User_Idea}}` are the custom fields you created.*
+### ManyChat Dynamic Variables
 
-## Step 4: Response Mapping (Crucial)
-1. In the External Request window, click the **Test Request** button.
-   *   *Tip: You might need to temporarily hardcode values in the Body for the test to work if your current user fields are empty.*
-   *   *Or, run the flow once to populate your fields, then come back to test.*
-2. Once you get a `200 OK` response with the JSON, go to the **Response Mapping** tab.
-3. Map the JSON response to your ManyChat field:
-   *   **JSON Path**: `$.script`
-   *   **Save to Custom Field**: `AI_Script_Result`
-
-## Step 5: Handling Timeouts (Important)
-Since video processing takes time (5-15 seconds), ManyChat might timeout (10s limit).
-
-**Ideally**, ensure your backend returns within 10s. If requests consistently timeout:
-1. Increase your server power (Render standard tier).
-2. Or, tell users "This might take a moment" before the request.
+| Variable | Source |
+|----------|--------|
+| `{{subscriber_id}}` | System field (automatic) |
+| `{{user_reel_url}}` | Custom field you create |
+| `{{user_idea}}` | Custom field (optional) |
 
 ---
 
-## Example Flow Outline
+## 🎯 ManyChat Action Setup
 
-1. **Message**: "Send me an Instagram Reel link!"
-   *   Input saved to `{{User_Reel_Url}}`
-2. **Message**: "What's your idea for this script?"
-   *   Input saved to `{{User_Idea}}`
-3. **Message**: "Analyzing... (This takes about 10 seconds) 🤖"
-4. **Action**: External Request (Calls your API)
-   *   *On Success*: Go to Step 5.
-   *   *On Failure*: Message "Something went wrong. Make sure it's a public Reel."
-5. **Message**: "Here is your script! 👇"
-6. **Message**: `{{AI_Script_Result}}`
+### Step 1: Create the Trigger
+
+1. **Automation** → **New Flow**
+2. Add **Keyword Trigger** (e.g., "script", "analyze", "reel")
+3. Or use **User Input** to collect the reel URL
+
+### Step 2: Configure User Input
+
+```
+[Text] "Send me the Instagram Reel URL and I'll create a script for you!"
+
+[User Input]
+  - Variable: user_reel_url
+  - Validation: Text (contains "instagram.com/reel")
+```
+
+### Step 3: API Request
+
+1. Add **External Request** action
+2. Configure:
+
+| Setting | Value |
+|---------|-------|
+| Method | POST |
+| URL | `https://your-app.onrender.com/api/v1/script/generate` |
+| Headers | `Content-Type: application/json` |
+| Body | See JSON below |
+
+**Body (Raw JSON):**
+```json
+{
+  "subscriber_id": "{{subscriber_id}}",
+  "reel_url": "{{user_reel_url}}",
+  "user_idea": "{{user_idea}}"
+}
+```
+
+### Step 4: Immediate Response
+
+After the API request, send acknowledgment:
+
+```
+[Text] "🎬 Analyzing your reel... I'll send your script in a moment!"
+```
+
+---
+
+## 📤 What Gets Sent to User
+
+After processing, ScriptFlow automatically sends **TWO messages**:
+
+### Message 1: Script Image
+```
+📸 [Beautiful formatted script image]
+```
+
+### Message 2: Copy Link (NEW!)
+```
+📋 Tap to copy script text:
+https://your-app.onrender.com/s/XyZ123
+```
+
+**User clicks the link → Mobile-friendly page with one-tap copy!**
+
+---
+
+## 🎨 Optional: Tone & Language Hints
+
+You can customize script generation with optional parameters:
+
+### Tone Hint
+```json
+{
+  "subscriber_id": "{{subscriber_id}}",
+  "reel_url": "{{user_reel_url}}",
+  "user_idea": "{{user_idea}}",
+  "tone_hint": "funny"
+}
+```
+
+**Available tones:**
+- `professional`
+- `funny`
+- `provocative`
+- `educational`
+- `casual`
+
+### Language Hint
+```json
+{
+  "subscriber_id": "{{subscriber_id}}",
+  "reel_url": "{{user_reel_url}}",
+  "user_idea": "{{user_idea}}",
+  "language_hint": "Hindi-English mix"
+}
+```
+
+### Hook Only Mode
+```json
+{
+  "subscriber_id": "{{subscriber_id}}",
+  "reel_url": "{{user_reel_url}}",
+  "user_idea": "{{user_idea}}",
+  "mode": "hook_only"
+}
+```
+
+---
+
+## ⚡ Quick Keyword Responses
+
+Set up keyword triggers for common requests:
+
+| User Says | API Parameters |
+|-----------|----------------|
+| "analyze this reel funny" | `tone_hint: "funny"` |
+| "analyze this reel hindi" | `language_hint: "Hindi-English mix"` |
+| "just the hook" | `mode: "hook_only"` |
+
+---
+
+## 🚨 Troubleshooting
+
+### "Script image not showing"
+
+1. Check Field ID is correct in `.env`
+2. Verify API key has correct permissions
+3. Check logs: `docker logs scriptflow-backend`
+
+### "Copy link not working"
+
+1. Ensure `BASE_URL` is set in `.env`
+2. Verify the URL is publicly accessible
+3. Check if script was saved (MongoDB)
+
+### "Request timeout"
+
+The script generation is async. ManyChat should NOT wait for response.
+Set timeout in External Request to **30 seconds** max.
+
+### "User not receiving messages"
+
+1. Check if user is within 24-hour messaging window
+2. Verify `message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"` is being used
+3. Check ManyChat API rate limits
+
+---
+
+## 🔒 Security Notes
+
+1. **Never expose API keys** in ManyChat flows
+2. **Rate limiting** is enforced (10 requests/hour per user)
+3. **Beta access control** limits to first 100 users
+4. **Script links expire** when database is cleared (not time-based)
+
+---
+
+## 📊 Testing Checklist
+
+- [ ] Send test reel URL → Receive script image
+- [ ] Click copy link → Page loads on mobile
+- [ ] Tap "Copy" button → Text copied successfully
+- [ ] Test with tone_hint → Tone applied
+- [ ] Test with language_hint → Language applied
+- [ ] Test rate limiting → 11th request blocked
+
+---
+
+## 🆘 Support
+
+For issues, check:
+1. Backend logs: `docker logs scriptflow-backend`
+2. MongoDB: Check `scripts` collection for saved data
+3. ManyChat: Review flow execution history
+
+---
+
+**Version:** 3.0.0 - Two-Tier Cache + Copy Links  
+**Last Updated:** December 2024
