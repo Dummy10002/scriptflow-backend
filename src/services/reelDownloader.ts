@@ -46,10 +46,23 @@ export async function downloadReel(url: string, id: string): Promise<string> {
     return outputPath;
   } catch (error: any) {
     logger.error('Failed to download reel', error);
-    // If it was a timeout or filter error, throw specific
-    if (error.message?.includes('duration')) {
-        throw new Error('Video too long');
+    
+    // Get stderr which contains the actual error messages from yt-dlp
+    const stderr = error.stderr || error.message || '';
+    
+    // Check for Instagram authentication/rate-limit errors
+    if (stderr.includes('login required') || 
+        stderr.includes('rate-limit reached') ||
+        stderr.includes('Requested content is not available')) {
+        throw new Error('Instagram login required - content unavailable');
     }
+    
+    // Check for duration filter rejection (actual match-filter output)
+    // yt-dlp outputs: "does not pass filter duration <= 300"
+    if (stderr.includes('does not pass filter') && stderr.includes('duration')) {
+        throw new Error('Video too long (max 5 minutes)');
+    }
+    
     throw new Error(`Download failed: ${error.message}`);
   }
 }
