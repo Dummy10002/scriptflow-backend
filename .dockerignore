@@ -1,6 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Environment variables (SECURITY RISK)
+.env
+.env.*
+
+# Dependencies
 node_modules
+npm-debug.log
+
+# Build artifacts
 dist
+
+# Temporary files
 temp
 data
-.git
-.env
+coverage
+
+# IDE settings
+.vscode
+.idea
+
+# Documentation
+docs
+*.md
+
+# Tests
+tests
+*.test.ts
+*.spec.ts

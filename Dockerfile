@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     ca-certificates \
-    chromium \
+    ca-certificates \
     fonts-liberation \
     libasound2 \
     libatk-bridge2.0-0 \
@@ -44,9 +44,6 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Puppeteer to use installed Chromium
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 
 # Install yt-dlp globally

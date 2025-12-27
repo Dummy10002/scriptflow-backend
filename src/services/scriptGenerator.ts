@@ -21,6 +21,9 @@ export interface ScriptGeneratorOptions {
   toneHint?: ToneHint;
   languageHint?: string;
   mode?: GenerationMode;
+  
+  // NEW: Previous scripts for same reel (for context/learning)
+  previousScripts?: { idea: string; script: string }[];
 }
 
 // ============================================
@@ -142,6 +145,25 @@ export async function generateScript(
     referenceDNA = 'No reference provided. Use an intense, strategic tone.';
   }
 
+  // NEW: Include previous scripts as learning context
+  let priorContext = '';
+  if (options.previousScripts && options.previousScripts.length > 0) {
+    priorContext = `
+
+--- PRIOR GENERATION CONTEXT (Learn from these but create something NEW) ---
+The following scripts were previously generated for THIS SAME video but with DIFFERENT ideas.
+Use them to understand what worked well with this video's style, but DO NOT copy them.
+Create a FRESH script for the NEW concept.
+
+${options.previousScripts.slice(0, 2).map((ps, i) => `
+PREVIOUS IDEA ${i + 1}: "${ps.idea}"
+PREVIOUS SCRIPT ${i + 1}:
+${ps.script}
+`).join('\n')}
+--- END PRIOR CONTEXT ---
+`;
+  }
+
   // ============================================
   // MASTER PROMPT - UNCHANGED
   // ============================================
@@ -190,7 +212,7 @@ export async function generateScript(
 
   // Append optional hints (if any) WITHOUT modifying master prompt
   const optionalHints = buildOptionalHints(options);
-  const fullPrompt = masterPrompt + optionalHints;
+  const fullPrompt = masterPrompt + priorContext + optionalHints;
 
   // Model configuration with fallback hierarchy
   const MODEL_HIERARCHY = [

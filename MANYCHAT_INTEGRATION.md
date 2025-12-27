@@ -1,8 +1,11 @@
-# ManyChat Integration Manual - ScriptFlow v2.5
+# ManyChat Integration Manual - ScriptFlow v3.0
 
 ## Overview
 
-This guide covers how to set up ManyChat for ScriptFlow, including the **new copy-friendly script link feature**.
+This guide covers how to set up ManyChat for ScriptFlow, including:
+- **Copy-friendly script links** – Users can tap to copy the full script text on mobile
+- **Two-tier caching** – Saves ~80% AI costs by reusing video analysis for the same reel
+- **Tone/Language hints** – Optional parameters to customize script style
 
 ---
 
@@ -283,5 +286,5 @@ For issues, check:
 
 ---
 
-**Version:** 2.5.0 - Copy-Friendly Links  
+**Version:** 3.0.0 - Two-Tier Cache + Copy Links  
 **Last Updated:** December 2024

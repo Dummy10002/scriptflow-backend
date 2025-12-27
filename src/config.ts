@@ -30,10 +30,11 @@ export const config = cleanEnv(process.env, {
   // ManyChat
   MANYCHAT_API_KEY: str({ desc: 'API Key for ManyChat (Optional in dev)', default: '' }),
   MANYCHAT_SCRIPT_FIELD_ID: str({ desc: 'Field ID for script image URL', default: '' }),
+  MANYCHAT_COPY_FIELD_ID: str({ desc: 'Field ID for script copy URL', default: '' }),
+  MANYCHAT_ENABLE_DIRECT_MESSAGING: str({ desc: 'Enable direct message sending', default: 'false' }),
   
   // Image Services
   IMGBB_API_KEY: str({ desc: 'API Key for ImgBB' }),
-  PUPPETEER_EXECUTABLE_PATH: str({ desc: 'Path to Chromium', default: '' }),
   FFMPEG_PATH: str({ desc: 'Path to FFmpeg executable', default: ffmpegPath || '' }),
   FFPROBE_PATH: str({ desc: 'Path to FFprobe executable', default: ffprobePath || '' }),
   

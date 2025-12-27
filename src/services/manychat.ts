@@ -14,8 +14,8 @@ export interface ManyChatPayload {
 }
 
 export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
-  // SECURITY: Use validated config object, not direct env access
   const apiKey = config.MANYCHAT_API_KEY;
+  const enableDirect = config.MANYCHAT_ENABLE_DIRECT_MESSAGING === 'true';
   
   if (!apiKey) {
     logger.warn('Skipping ManyChat send: No MANYCHAT_API_KEY provided.');
@@ -24,38 +24,48 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
 
   const subscriberIdInt = parseInt(payload.subscriber_id, 10);
   
-  // Validate subscriber_id is a valid number
   if (isNaN(subscriberIdInt)) {
     logger.error(`Invalid subscriber_id: ${payload.subscriber_id}`);
     return;
   }
 
   try {
-    logger.info(`Sending to ManyChat. Subscriber: ${payload.subscriber_id}, Value Length: ${payload.field_value.length}`);
+    logger.info(`Sending to ManyChat. Subscriber: ${payload.subscriber_id}`);
 
-    // 1. Set the Custom Field by ID (Most Reliable)
+    // 1. Update Custom Fields (ALWAYS DONE)
     const setFieldUrl = 'https://api.manychat.com/fb/subscriber/setCustomField';
     
-    // Use the field ID explicitly from config if available, otherwise fallback to payload name
-    const fieldId = config.MANYCHAT_SCRIPT_FIELD_ID || payload.field_name;
+    // Update Image URL Field
+    const imageFieldId = config.MANYCHAT_SCRIPT_FIELD_ID || payload.field_name;
+    if (imageFieldId) {
+      await axios.post(setFieldUrl, {
+        subscriber_id: subscriberIdInt,
+        field_id: parseInt(imageFieldId, 10),
+        field_value: payload.field_value
+      }, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: API_TIMEOUT_MS
+      });
+    }
 
-    await axios.post(setFieldUrl, {
-      subscriber_id: subscriberIdInt,
-      field_id: parseInt(fieldId, 10),
-      field_value: payload.field_value
-    }, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      timeout: API_TIMEOUT_MS
-    });
+    // Update Copy URL Field (NEW)
+    if (payload.scriptUrl && config.MANYCHAT_COPY_FIELD_ID) {
+      await axios.post(setFieldUrl, {
+        subscriber_id: subscriberIdInt,
+        field_id: parseInt(config.MANYCHAT_COPY_FIELD_ID, 10),
+        field_value: payload.scriptUrl
+      }, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        timeout: API_TIMEOUT_MS
+      });
+      logger.info(`Updated script_copy_url field for ${payload.subscriber_id}`);
+    }
 
-    // 2. Send the image to the user (if this is an image URL field)
-    if (payload.field_name === 'script_image_url') {
+    // 2. Direct Messaging (CONTROLLABLE BY CONFIG)
+    if (enableDirect && payload.field_name === 'script_image_url') {
       const sendContentUrl = 'https://api.manychat.com/fb/sending/sendContent';
       
-      // Send the script image
+      // Send Image
       try {
         await axios.post(sendContentUrl, {
           subscriber_id: payload.subscriber_id,
@@ -64,66 +74,45 @@ export async function sendToManyChat(payload: ManyChatPayload): Promise<void> {
             content: {
               type: "image",
               url: payload.field_value,
-              action: {
-                type: "open_url",
-                url: payload.field_value
-              }
+              action: { type: "open_url", url: payload.field_value }
             }
           },
           message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
         }, {
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
           timeout: API_TIMEOUT_MS
         });
-        
-        logger.info(`Image sent successfully to ${payload.subscriber_id}`);
-      } catch (imageError: any) {
-        // Log but don't fail the whole operation
-        logger.error(`Failed to send image: ${imageError.response?.data?.message || imageError.message}`);
+      } catch (e: any) {
+        logger.error(`Failed direct image send: ${e.message}`);
       }
 
-      // 3. Send copy-friendly link as a follow-up message (isolated error handling)
+      // Send Copy Link text
       if (payload.scriptUrl) {
         try {
-          logger.info(`Sending copy link to ManyChat: ${payload.scriptUrl}`);
-          
           await axios.post(sendContentUrl, {
             subscriber_id: payload.subscriber_id,
             data: {
               version: "v2",
               content: {
-                messages: [
-                  {
-                    type: "text",
-                    text: `📋 Tap to copy script text:\n${payload.scriptUrl}`
-                  }
-                ]
+                messages: [{ type: "text", text: `📋 Tap to copy script text:\n${payload.scriptUrl}` }]
               }
             },
             message_tag: "NON_PROMOTIONAL_SUBSCRIPTION"
           }, {
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
             timeout: API_TIMEOUT_MS
           });
-          
-          logger.info(`Copy link sent successfully to ${payload.subscriber_id}`);
-        } catch (linkError: any) {
-          // Log but don't fail - the image was sent, copy link is optional
-          logger.warn(`Failed to send copy link (non-critical): ${linkError.response?.data?.message || linkError.message}`);
+        } catch (e: any) {
+          logger.warn(`Failed direct link send: ${e.message}`);
         }
       }
+    } else if (!enableDirect) {
+      logger.info(`Direct messaging disabled. Relying on ManyChat field triggers for ${payload.subscriber_id}`);
     }
 
-    logger.info(`Successfully completed ManyChat send for user: ${payload.subscriber_id}`);
+    logger.info(`Successfully completed ManyChat updates for user: ${payload.subscriber_id}`);
 
   } catch (error: any) {
     logger.error('Failed to send to ManyChat', JSON.stringify(error.response?.data || error.message, null, 2));
-    // Don't throw - ManyChat failures should not break the job
   }
 }

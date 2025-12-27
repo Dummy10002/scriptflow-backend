@@ -14,9 +14,10 @@ import { cleanupFiles } from '../services/cleanup';
 import { sendToManyChat } from '../services/manychat';
 import { generateScriptImage } from '../utils/imageGenerator';
 import { generateUniquePublicId, buildScriptUrl } from '../api/viewScript';
+import { generateReelHash, normalizeInstagramUrl } from '../utils/hash';
 
 // Database
-import { Script, Job } from '../db/models';
+import { Script, Job, ReelDNA } from '../db/models';
 import { 
   DatasetEntry, 
   parseScriptSections, 
@@ -70,15 +71,30 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     // Report progress
     await job.updateProgress(10);
 
-    // A. Download video
-    logger.info(`[${requestId}] Downloading video...`);
-    videoPath = await downloadReel(reelUrl, requestId);
-    await job.updateProgress(25);
-
-    // B. Extract media based on analysis mode
+    // ==== TIER 1 CACHE CHECK: Reuse video analysis if available ====
+    const reelHash = generateReelHash(reelUrl);
+    const cachedDNA = await ReelDNA.findOne({ reelUrlHash: reelHash }).lean();
+    
     let videoAnalysis: VideoAnalysis | null = null;
     let transcript: string | null = null;
-    let frames: string[] = [];  // Track frames for dataset
+    let frames: string[] = [];
+    let usedTier1Cache = false;
+
+    if (cachedDNA) {
+      // TIER 1 CACHE HIT: Skip download/extraction/analysis entirely!
+      logger.info(`[${requestId}] ✅ Tier 1 Cache HIT (Reel DNA found) - Skipping video processing`);
+      videoAnalysis = cachedDNA.analysis;
+      transcript = videoAnalysis.transcript;
+      usedTier1Cache = true;
+      await job.updateProgress(60); // Jump ahead since we skipped expensive steps
+    } else {
+      // TIER 1 CACHE MISS: Full video processing required
+      logger.info(`[${requestId}] Tier 1 Cache MISS - Processing video...`);
+
+      // A. Download video
+      logger.info(`[${requestId}] Downloading video...`);
+      videoPath = await downloadReel(reelUrl, requestId);
+      await job.updateProgress(25);
 
     if (ANALYSIS_MODE === 'hybrid' || ANALYSIS_MODE === 'frames') {
       logger.info(`[${requestId}] Extracting frames & audio...`);
@@ -131,23 +147,68 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
         await job.updateProgress(60);
       }
     } else {
+      // Audio-only mode
       audioPath = await extractAudio(videoPath, requestId);
       videoAnalysis = await analyzeVideo({ audioPath, includeAudio: true });
       transcript = videoAnalysis.transcript;
       await job.updateProgress(60);
     }
 
-    // C. Generate script (with optional hints)
+      // ==== STORE TIER 1 CACHE: Save analysis for future requests ====
+      if (videoAnalysis) {
+        try {
+          await ReelDNA.create({
+            reelUrlHash: reelHash,
+            reelUrl,
+            analysis: videoAnalysis
+          });
+          logger.info(`[${requestId}] ✅ Tier 1 Cache saved (Reel DNA stored)`);
+        } catch (cacheError: any) {
+          // Ignore duplicate key errors (race condition with parallel requests)
+          if (cacheError.code !== 11000) {
+            logger.warn(`[${requestId}] Failed to save Tier 1 cache:`, cacheError.message);
+          }
+        }
+      }
+    } // End of Tier 1 cache miss block
+
+    // C. Lookup previous scripts for this reel (Expert: learn from history)
+    let previousScripts: { idea: string; script: string }[] = [];
+    try {
+      const normalizedUrl = normalizeInstagramUrl(reelUrl);
+      
+      // Expert Lookup: Find scripts sharing the same normalized URL
+      const previousScriptsRaw = await Script.find({ 
+        reelUrl: normalizedUrl 
+      })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .lean();
+      
+      previousScripts = previousScriptsRaw
+        .filter(ps => ps.userIdea !== userIdea) // Don't include same idea
+        .map(ps => ({ idea: ps.userIdea, script: ps.scriptText }));
+      
+      if (previousScripts.length > 0) {
+        logger.info(`[${requestId}] Found ${previousScripts.length} previous scripts for context learning`);
+      }
+    } catch (contextError: any) {
+      // Expert Error Handling: Don't fail generation just because history lookup failed
+      logger.warn(`[${requestId}] Non-critical: Failed to lookup previous scripts: ${contextError.message}`);
+    }
+
+    // D. Generate script (with optional hints and previous scripts)
+
     logger.info(`[${requestId}] Generating script...`);
     const scriptGenStartTime = Date.now();
     const scriptText = await generateScript({
       userIdea,
       transcript,
       visualAnalysis: videoAnalysis,
-      // NEW: Pass hints (these APPEND to master prompt, don't replace)
       toneHint,
       languageHint,
-      mode
+      mode,
+      previousScripts // NEW: Pass previous scripts for learning
     });
     const scriptGenTimeMs = Date.now() - scriptGenStartTime;
     await job.updateProgress(75);
