@@ -29,14 +29,26 @@ export async function downloadReel(url: string, id: string): Promise<string> {
   logger.info(`Downloading reel: ${url} to ${outputPath}`);
 
   try {
-    // Force mp4 for compatibility
-    await YtDlpWrap(url, {
+    // Build yt-dlp options
+    const ytDlpOptions: any = {
       output: outputPath,
       format: 'worst[ext=mp4]', // Lowest quality mp4 is fine for audio extraction
       maxFilesize: '50M',
       matchFilter: `duration <= ${MAX_DURATION_SEC}`,
       noPlaylist: true,
-    });
+    };
+
+    // Add cookies if configured (required for Instagram authentication)
+    const cookiesPath = process.env.INSTAGRAM_COOKIES_PATH;
+    if (cookiesPath && fs.existsSync(cookiesPath)) {
+      ytDlpOptions.cookies = cookiesPath;
+      logger.info(`Using Instagram cookies from: ${cookiesPath}`);
+    } else if (cookiesPath) {
+      logger.warn(`Cookies path configured but file not found: ${cookiesPath}`);
+    }
+
+    // Force mp4 for compatibility
+    await YtDlpWrap(url, ytDlpOptions);
 
     // Check if file exists
     if (!fs.existsSync(outputPath)) {

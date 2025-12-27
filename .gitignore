@@ -7,6 +7,10 @@ build
 .env.test
 .env.production
 
+# Instagram Authentication (contains sensitive session data)
+instagram_cookies.txt
+*_cookies.txt
+
 # Database
 *.db
 *.sqlite

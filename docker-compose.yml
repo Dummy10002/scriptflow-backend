@@ -23,9 +23,11 @@ services:
       - ADMIN_API_KEY=${ADMIN_API_KEY:-}
       - ANALYSIS_MODE=${ANALYSIS_MODE:-hybrid}
       - BASE_URL=${BASE_URL:-}
+      - INSTAGRAM_COOKIES_PATH=/app/instagram_cookies.txt
     volumes:
       - ./temp:/app/temp
       - ./fonts:/app/fonts
+      - ./instagram_cookies.txt:/app/instagram_cookies.txt:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
