@@ -9,7 +9,7 @@ import { downloadReel } from '../services/reelDownloader';
 import { extractAudio } from '../services/audioExtractor';
 import { extractFrames, cleanupFrames } from '../services/frameExtractor';
 import { analyzeVideo, VideoAnalysis } from '../services/videoAnalyzer';
-import { generateScript } from '../services/scriptGenerator';
+import { generateScript, generateScriptFromVideo } from '../services/scriptGenerator';
 import { cleanupFiles } from '../services/cleanup';
 import { sendToManyChat } from '../services/manychat';
 import { generateScriptImage } from '../utils/imageGenerator';
@@ -79,98 +79,8 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
     let transcript: string | null = null;
     let frames: string[] = [];
     let usedTier1Cache = false;
-
-    if (cachedDNA) {
-      // TIER 1 CACHE HIT: Skip download/extraction/analysis entirely!
-      logger.info(`[${requestId}] ✅ Tier 1 Cache HIT (Reel DNA found) - Skipping video processing`);
-      videoAnalysis = cachedDNA.analysis;
-      transcript = videoAnalysis.transcript;
-      usedTier1Cache = true;
-      await job.updateProgress(60); // Jump ahead since we skipped expensive steps
-    } else {
-      // TIER 1 CACHE MISS: Full video processing required
-      logger.info(`[${requestId}] Tier 1 Cache MISS - Processing video...`);
-
-      // A. Download video
-      logger.info(`[${requestId}] Downloading video...`);
-      videoPath = await downloadReel(reelUrl, requestId);
-      await job.updateProgress(25);
-
-    if (ANALYSIS_MODE === 'hybrid' || ANALYSIS_MODE === 'frames') {
-      logger.info(`[${requestId}] Extracting frames & audio...`);
-      
-      const framePromise = extractFrames(videoPath, requestId, {
-        quality: 5,
-        width: 480
-      });
-
-      let audioPromise: Promise<string | null> | null = null;
-      if (ANALYSIS_MODE === 'hybrid') {
-        audioPromise = extractAudio(videoPath, requestId);
-      }
-
-      // Parallel execution (Optimization: Save ~2-3s)
-      const [frameResult, audioResult] = await Promise.all([
-        framePromise,
-        audioPromise ? audioPromise : Promise.resolve(null)
-      ]);
-
-      const { frames: extractedFrames, extractionTimeMs } = frameResult;
-      frames = extractedFrames;  // Assign to outer scope
-      audioPath = audioResult;
-      
-      logger.info(`[${requestId}] Frames extracted in ${extractionTimeMs}ms`);
-      if (audioPath) logger.info(`[${requestId}] Audio extracted`);
-      
-      await job.updateProgress(40);
-
-      if (frames.length > 0) {
-        frameDir = path.dirname(frames[0]);
-
-        logger.info(`[${requestId}] Analyzing video with ${frames.length} frames...`);
-        videoAnalysis = await analyzeVideo({
-          frames,
-          audioPath: audioPath || undefined,
-          includeAudio: !!audioPath
-        });
-
-        transcript = videoAnalysis.transcript;
-        await job.updateProgress(60);
-      } else {
-        logger.warn(`[${requestId}] Frame extraction failed, falling back to audio-only`);
-        if (!audioPath) {
-           // If we didn't extract audio yet (e.g. somehow failed parallel), try strictly now
-           audioPath = await extractAudio(videoPath, requestId);
-        }
-        videoAnalysis = await analyzeVideo({ audioPath, includeAudio: true });
-        transcript = videoAnalysis.transcript;
-        await job.updateProgress(60);
-      }
-    } else {
-      // Audio-only mode
-      audioPath = await extractAudio(videoPath, requestId);
-      videoAnalysis = await analyzeVideo({ audioPath, includeAudio: true });
-      transcript = videoAnalysis.transcript;
-      await job.updateProgress(60);
-    }
-
-      // ==== STORE TIER 1 CACHE: Save analysis for future requests ====
-      if (videoAnalysis) {
-        try {
-          await ReelDNA.create({
-            reelUrlHash: reelHash,
-            reelUrl,
-            analysis: videoAnalysis
-          });
-          logger.info(`[${requestId}] ✅ Tier 1 Cache saved (Reel DNA stored)`);
-        } catch (cacheError: any) {
-          // Ignore duplicate key errors (race condition with parallel requests)
-          if (cacheError.code !== 11000) {
-            logger.warn(`[${requestId}] Failed to save Tier 1 cache:`, cacheError.message);
-          }
-        }
-      }
-    } // End of Tier 1 cache miss block
+    let scriptText = '';
+    let scriptGenStartTime = 0;
 
     // C. Lookup previous scripts for this reel (Expert: learn from history)
     let previousScripts: { idea: string; script: string }[] = [];
@@ -197,19 +107,88 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
       logger.warn(`[${requestId}] Non-critical: Failed to lookup previous scripts: ${contextError.message}`);
     }
 
-    // D. Generate script (with optional hints and previous scripts)
+    if (cachedDNA) {
+      // ============================================
+      // PATH 1: TIER 1 CACHE HIT (Text-Only Mode)
+      // ============================================
+      // We have the analysis, simple text generation call (1 Call)
+      logger.info(`[${requestId}] ✅ Tier 1 Cache HIT (Reel DNA found) - Using cached analysis`);
+      videoAnalysis = cachedDNA.analysis;
+      transcript = videoAnalysis.transcript;
+      usedTier1Cache = true;
+      await job.updateProgress(60); 
 
-    logger.info(`[${requestId}] Generating script...`);
-    const scriptGenStartTime = Date.now();
-    const scriptText = await generateScript({
-      userIdea,
-      transcript,
-      visualAnalysis: videoAnalysis,
-      toneHint,
-      languageHint,
-      mode,
-      previousScripts // NEW: Pass previous scripts for learning
-    });
+      logger.info(`[${requestId}] Generating script (Text Mode)...`);
+      scriptGenStartTime = Date.now();
+      
+      scriptText = await generateScript({
+        userIdea,
+        transcript,
+        visualAnalysis: videoAnalysis,
+        toneHint,
+        languageHint,
+        mode,
+        previousScripts
+      });
+
+    } else {
+      // ============================================
+      // PATH 2: TIER 1 CACHE MISS (One-Shot Mode)
+      // ============================================
+      // No analysis? Download video and do One-Shot Gen (1 Call)
+      // We SKIP the explicit analyzeVideo step to save costs.
+      
+      logger.info(`[${requestId}] Tier 1 Cache MISS - Starting One-Shot Generation...`);
+
+      // A. Download video
+      logger.info(`[${requestId}] Downloading video...`);
+      videoPath = await downloadReel(reelUrl, requestId);
+      await job.updateProgress(25);
+
+      // B. Extract Frames & Audio
+      logger.info(`[${requestId}] Extracting frames & audio...`);
+      
+      const framePromise = extractFrames(videoPath, requestId, {
+        quality: 5,
+        width: 480
+      });
+
+      let audioPromise: Promise<string | null> | null = null;
+      // Always try to extract audio for One-Shot
+      audioPromise = extractAudio(videoPath, requestId);
+
+      const [frameResult, audioResult] = await Promise.all([
+        framePromise,
+        audioPromise
+      ]);
+
+      frames = frameResult.frames;
+      audioPath = audioResult;
+      
+      if (frames.length > 0) frameDir = path.dirname(frames[0]);
+
+      logger.info(`[${requestId}] Frames extracted in ${frameResult.extractionTimeMs}ms`);
+      await job.updateProgress(40);
+
+      // C. Generate Script Directly (One-Shot)
+      logger.info(`[${requestId}] Generating script (One-Shot Video Mode)...`);
+      scriptGenStartTime = Date.now();
+      
+      scriptText = await generateScriptFromVideo({
+        userIdea,
+        frames,
+        audioPath,
+        transcript: null, // Unknown yet
+        toneHint,
+        languageHint,
+        mode,
+        previousScripts
+      });
+      
+      // NOTE: We do NOT save ReelDNA here because we skipped the structured analysis step.
+      // This is the tradeoff for 50% cost savings.
+    }
+
     const scriptGenTimeMs = Date.now() - scriptGenStartTime;
     await job.updateProgress(75);
 
@@ -238,14 +217,15 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
         imageUrl,
         scriptUrl,
         generationTimeMs,
-        modelVersion: 'gemini-2.5-flash'
+        modelVersion: 'gemini-2.5-flash' // or 1.5-flash for one-shot
       },
       { upsert: true, new: true }
     );
 
     // E. Save to Dataset for ML training (Enhanced schema v2.0)
+    // For One-Shot, analysis fields will be empty/undefined.
     const scriptSections = parseScriptSections(scriptText);
-    const analysisTimeMs = generationTimeMs - scriptGenTimeMs;
+    const analysisTimeMs = usedTier1Cache ? 0 : 0; // Effectively 0 separate analysis time
     
     await DatasetEntry.create({
       // INPUT FEATURES
@@ -259,7 +239,7 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
         languageHint,
         mode: mode || 'full',
         
-        // Video analysis results
+        // Video analysis results (May be empty for One-Shot)
         transcript: transcript || undefined,
         transcriptWordCount: countWords(transcript || undefined),
         visualCues: videoAnalysis?.visualCues || [],
@@ -294,14 +274,14 @@ async function processJob(job: BullJob<ScriptJobData>): Promise<ScriptJobResult>
       
       // GENERATION METADATA
       generation: {
-        analysisModel: 'gemini-2.5-flash',
-        scriptModel: 'gemini-2.5-flash',
+        analysisModel: usedTier1Cache ? 'gemini-2.5-flash' : 'none',
+        scriptModel: usedTier1Cache ? 'gemini-2.5-flash' : 'gemini-1.5-flash',
         analysisTimeMs,
         generationTimeMs: scriptGenTimeMs,
         totalTimeMs: generationTimeMs,
         analysisAttempts: 1,
         generationAttempts: 1,
-        promptVersion: 'steal-artist-v2.0'
+        promptVersion: 'steal-artist-one-shot-v1.0'
       },
       
       // TRAINING FLAGS

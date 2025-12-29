@@ -46,4 +46,12 @@ export const config = cleanEnv(process.env, {
   
   // Analysis
   ANALYSIS_MODE: str({ choices: ['audio', 'frames', 'hybrid'], default: 'hybrid' }),
+  // AWS Configuration (for S3 and Hosting)
+  AWS_REGION: str({ desc: 'AWS Region', default: 'ap-south-1' }),
+  AWS_ACCESS_KEY_ID: str({ desc: 'AWS Access Key ID', default: '' }),
+  AWS_SECRET_ACCESS_KEY: str({ desc: 'AWS Secret Access Key', default: '' }),
+  S3_BUCKET_NAME: str({ desc: 'S3 Bucket Name for images', default: '' }),
+  
+  // Image Provider Selection
+  IMAGE_PROVIDER: str({ choices: ['s3', 'imgbb'], default: 'imgbb' }),
 });

@@ -17,7 +17,7 @@ const COOKIES_PATH = '/app/instagram_cookies.txt';
 if (process.env.INSTAGRAM_COOKIES) {
   try {
     fs.writeFileSync(COOKIES_PATH, process.env.INSTAGRAM_COOKIES, 'utf-8');
-    console.log('Successfully initialized cookies from ENV');
+    logger.info('Successfully initialized cookies from ENV');
     logger.info(`Instagram cookies initialized at ${COOKIES_PATH}`);
   } catch (err) {
     logger.error('Failed to write Instagram cookies from ENV:', err);

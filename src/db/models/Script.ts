@@ -41,7 +41,8 @@ const ScriptSchema = new Schema<IScript>({
   },
   reelUrl: { 
     type: String, 
-    required: true 
+    required: true,
+    index: true 
   },
   userIdea: { 
     type: String, 

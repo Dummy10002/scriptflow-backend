@@ -1,0 +1,62 @@
+# Build Stage
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# Production Stage
+FROM node:20-slim
+
+WORKDIR /app
+
+# Install runtime dependencies (FFmpeg + Python3 for yt-dlp)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    ffmpeg \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user for security
+RUN groupadd -r scriptflow && useradd -r -g scriptflow scriptflow
+
+# Copy built artifacts and production deps
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
+RUN npm ci --only=production
+
+# Copy necessary static assets if any (e.g., fonts for Satori)
+# COPY fonts ./fonts 
+
+# Create cookie file (if needed by logic) and set permissions
+RUN touch instagram_cookies.txt && chown scriptflow:scriptflow instagram_cookies.txt
+
+# Environment Setup
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Switch to non-root user
+USER scriptflow
+
+# Expose port
+EXPOSE 3000
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+# Start application
+CMD ["node", "dist/index.js"]

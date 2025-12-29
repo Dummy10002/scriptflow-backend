@@ -83,7 +83,7 @@ export function createServer() {
   // Public script viewing page (copy-friendly)
   // Short URL: /s/:publicId
   // Rate limited: 60 requests per minute per IP (generous for normal use)
-  app.get('/s/:publicId', rateLimiter, viewScriptHandler);
+  app.get('/s/:publicId', viewScriptHandler);
   
   // Main API endpoint with ACCESS CONTROL
   // 1. betaAccessControl - Only first 100 users, others on waitlist

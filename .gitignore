@@ -49,4 +49,8 @@ jest.config.js
 jest.setup.js
 
 node_modules
-package-lock.json
+!package-lock.json
+
+# Scratch & Test Files
+src/test-dynamic-height.ts
+*_output.txt

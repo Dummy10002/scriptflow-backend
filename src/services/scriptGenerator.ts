@@ -1,9 +1,23 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, Part } from '@google/generative-ai';
+import fs from 'fs';
 import { logger } from '../utils/logger';
 import { VideoAnalysis } from './videoAnalyzer';
 import { config } from '../config';
 
 const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
+
+/**
+ * Helper to convert file to GenerativePart
+ */
+async function fileToGenerativePart(path: string, mimeType: string): Promise<Part> {
+  const data = await fs.promises.readFile(path);
+  return {
+    inlineData: {
+      data: data.toString('base64'),
+      mimeType
+    },
+  };
+}
 
 // ============================================
 // Types
@@ -24,6 +38,11 @@ export interface ScriptGeneratorOptions {
   
   // NEW: Previous scripts for same reel (for context/learning)
   previousScripts?: { idea: string; script: string }[];
+}
+
+export interface OneShotGeneratorOptions extends ScriptGeneratorOptions {
+  frames: string[];
+  audioPath?: string | null;
 }
 
 // ============================================
@@ -165,50 +184,9 @@ ${ps.script}
   }
 
   // ============================================
-  // MASTER PROMPT - UNCHANGED
+  // MASTER PROMPT CONSTRUCTION
   // ============================================
-  const masterPrompt = `
-  Apply the "Steal Like an Artist" framework to generate a new script.
-
-  REFERENCE DNA (The Source to Steal From):
-  ${referenceDNA}
-
-  NEW CONCEPT (The Topic to Apply the DNA to):
-  "${userIdea}"
-
-  INSTRUCTIONS:
-  1. **INTELLIGENT LINGUISTIC STYLE**: 
-     - Detect the original language mix of the transcript.
-     - **Check NEW CONCEPT for latent preferences**: If the user mentions a specific language or tone in "${userIdea}", prioritize that.
-     - **GLOBAL ROMANIZATION RULE**: Regardless of the language used, you MUST use ONLY the English/Roman alphabet (ABC...). NEVER use native scripts like देवनागरी, ಕನ್ನಡ, etc. Romanize all non-English words naturally.
-  
-  2. **STRICT OUTPUT FORMAT**: Each section MUST exactly follow this marker format:
-      
-     [HOOK]
-     🎬 VISUAL: (Specific camera direction/text overlay)
-     💬 SAY: "(Exact words to speak - MUST BE ROMANIZED)"
-
-     [BODY]
-     🎬 VISUAL: (Scene description, on-screen text, transitions)
-     💬 SAY: "(Spoken content)"
-     
-     (Multiple VISUAL/SAY pairs allowed per section)
-
-     [CTA]
-     🎬 VISUAL: (Final visual setup, text overlay if any)
-     💬 SAY: "(Call to action dialogue)"
-     
-  3. VISUAL GUIDELINES:
-     - Be specific: "Close-up face shot" not just "camera on face"
-     - Include text overlays: "Text appears: 'The 80/20 Rule'"
-     - Note transitions: "Jump cut to screen recording"
-     
-  4. DIALOGUE GUIDELINES:
-     - Keep it punchy and spoken-natural
-     - Match the reference's language style (Hinglish, casual English, etc.)
-     - PACING: 30-45 seconds total spoken time
-
-  Return ONLY the structured script with [HOOK], [BODY], [CTA] headers and 🎬 VISUAL: / 💬 SAY: lines. No other text.`;
+  const masterPrompt = createMasterPrompt(userIdea, referenceDNA);
 
   // Append optional hints (if any) WITHOUT modifying master prompt
   const optionalHints = buildOptionalHints(options);
@@ -267,3 +245,116 @@ ${ps.script}
   throw lastError || new Error('Script generation failed');
 }
 
+
+/**
+ * ONE-SHOT GENERATOR: Generates script directly from video input (1 API Call)
+ * Uses the EXACT SAME master prompt logic, but passes media directly to the model.
+ */
+export async function generateScriptFromVideo(options: OneShotGeneratorOptions): Promise<string> {
+  const { userIdea, frames, audioPath } = options;
+  
+  // 1. Prepare Media Parts
+  const mediaParts: Part[] = [];
+  
+  // Add Frames
+  if (frames && frames.length > 0) {
+    const framePromises = frames
+      .filter(f => fs.existsSync(f))
+      .map(f => fileToGenerativePart(f, 'image/jpeg'));
+    mediaParts.push(...await Promise.all(framePromises));
+  }
+  
+  // Add Audio
+  if (audioPath && fs.existsSync(audioPath)) {
+    mediaParts.push(await fileToGenerativePart(audioPath, 'audio/wav'));
+  }
+
+  // 2. Construct Prompt (Identical logic to text version)
+  // Instead of text analysis, we point to the attached media as the reference
+  const referenceDNA = `[VIDEO/AUDIO CONTENT ATTACHED]
+  Analyze the attached video frames and audio directly. 
+  Extract the pacing, tone, hook psychological structure, and language style from this media.
+  THIS IS YOUR REFERENCE DNA.`;
+
+  const masterPrompt = createMasterPrompt(userIdea, referenceDNA);
+  
+  // Hints & Context
+  const optionalHints = buildOptionalHints(options);
+  let priorContext = '';
+  if (options.previousScripts && options.previousScripts.length > 0) {
+    priorContext = `\n--- PRIOR GENERATION CONTEXT ---\n(See previous scripts for style learning)\n` + 
+      options.previousScripts.map((ps, i) => `PREVIOUS ${i+1}: ${ps.script}`).join('\n');
+  }
+
+  const fullPrompt = masterPrompt + priorContext + optionalHints;
+
+  // 3. Call Model (Gemini 1.5 Flash is best for multimodal one-shot)
+  // We use 1.5 Flash because it handles video tokens natively and efficiently
+  const modelName = 'gemini-1.5-flash';
+  
+  try {
+    logger.info(`Generating One-Shot script with model: ${modelName}`);
+    
+    const model = genAI.getGenerativeModel({ 
+      model: modelName,
+      systemInstruction: "You are a World-Class Creative Strategist who follows the 'Steal Like an Artist' framework."
+    });
+
+    const result = await model.generateContent([fullPrompt, ...mediaParts]);
+    const script = result.response.text();
+    return script.trim();
+
+  } catch (error: any) {
+    logger.error(`One-Shot generation failed: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * SHARED MASTER PROMPT BUILDER
+ * Ensures 100% consistency between text-based and video-based generation
+ */
+function createMasterPrompt(userIdea: string, referenceDNA: string): string {
+  return `
+  Apply the "Steal Like an Artist" framework to generate a new script.
+
+  REFERENCE DNA (The Source to Steal From):
+  ${referenceDNA}
+
+  NEW CONCEPT (The Topic to Apply the DNA to):
+  "${userIdea}"
+
+  INSTRUCTIONS:
+  1. **INTELLIGENT LINGUISTIC STYLE**: 
+     - Detect the original language mix of the transcript.
+     - **Check NEW CONCEPT for latent preferences**: If the user mentions a specific language or tone in "${userIdea}", prioritize that.
+     - **GLOBAL ROMANIZATION RULE**: Regardless of the language used, you MUST use ONLY the English/Roman alphabet (ABC...). NEVER use native scripts like देवनागरी, ಕನ್ನಡ, etc. Romanize all non-English words naturally.
+  
+  2. **STRICT OUTPUT FORMAT**: Each section MUST exactly follow this marker format:
+      
+     [HOOK]
+     🎬 VISUAL: (Specific camera direction/text overlay)
+     💬 SAY: "(Exact words to speak - MUST BE ROMANIZED)"
+
+     [BODY]
+     🎬 VISUAL: (Scene description, on-screen text, transitions)
+     💬 SAY: "(Spoken content)"
+     
+     (Multiple VISUAL/SAY pairs allowed per section)
+
+     [CTA]
+     🎬 VISUAL: (Final visual setup, text overlay if any)
+     💬 SAY: "(Call to action dialogue)"
+     
+  3. VISUAL GUIDELINES:
+     - Be specific: "Close-up face shot" not just "camera on face"
+     - Include text overlays: "Text appears: 'The 80/20 Rule'"
+     - Note transitions: "Jump cut to screen recording"
+     
+  4. DIALOGUE GUIDELINES:
+     - Keep it punchy and spoken-natural
+     - Match the reference's language style (Hinglish, casual English, etc.)
+     - PACING: 30-45 seconds total spoken time
+
+  Return ONLY the structured script with [HOOK], [BODY], [CTA] headers and 🎬 VISUAL: / 💬 SAY: lines. No other text.`;
+}

@@ -83,7 +83,7 @@ export async function analyzeVideo(options: AnalyzeOptions): Promise<VideoAnalys
   // Read audio
   let audioPart: Part | null = null;
   if (includeAudio && audioPath && fs.existsSync(audioPath)) {
-    audioPart = await fileToGenerativePart(audioPath, 'audio/mp3');
+    audioPart = await fileToGenerativePart(audioPath, 'audio/wav');
   }
 
   // Prepare prompt

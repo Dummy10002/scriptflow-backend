@@ -16,27 +16,34 @@ const fontDataSemiBold = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Popp
 const fontDataRegular = fs.readFileSync(path.join(process.cwd(), 'fonts', 'Poppins-Regular.ttf'));
 
 // ============================================
-// IMPROVED MINIMALIST DARK PALETTE
-// Clean, professional, high-readability
+// UNIFIED STYLING PALETTE
+// Matches copy link webpage exactly
 // ============================================
 const COLORS = {
-  // Minimalist Palette
-  bgDark: '#09090b',         // Zinc 950
-  bgSurface: '#18181b',      // Zinc 900
-  textMain: '#fafafa',       // Zinc 50
-  textDim: '#a1a1aa',        // Zinc 400
-  textMuted: '#52525b',      // Zinc 600
+  // Background Gradient (matches webpage)
+  bgGradientStart: '#09090b',
+  bgGradientEnd: '#18181b',
   
-  // Refined Accents
-  accent: '#22d3ee',         // Cyan 400 (Soft Electric Cyan)
-  accentMuted: 'rgba(34, 211, 238, 0.1)',
-  border: 'rgba(255, 255, 255, 0.06)',
-  divider: 'rgba(255, 255, 255, 0.03)',
+  // Text Colors
+  textMain: '#fafafa',
+  textSecondary: '#d4d4d8',
+  textDim: '#e4e4e7',
+  textMuted: '#52525b',
   
-  // Section Glows
+  // Accent Colors (cyan theme)
+  accent: '#22d3ee',
+  accentBg: 'rgba(34, 211, 238, 0.1)',
+  accentBorder: 'rgba(34, 211, 238, 0.3)',
+  accentGlow: 'rgba(34, 211, 238, 0.4)',
+  
+  // Card/Section Styling
   cardBg: 'rgba(24, 24, 27, 0.6)',
-  visualGlow: 'rgba(161, 161, 170, 0.03)',
-  sayGlow: 'rgba(34, 211, 238, 0.02)',
+  cardBorder: 'rgba(255, 255, 255, 0.08)',
+  cardShadow: 'rgba(0, 0, 0, 0.3)',
+  
+  // Dividers
+  divider: 'rgba(255, 255, 255, 0.06)',
+  dividerStrong: 'rgba(255, 255, 255, 0.08)',
 };
 
 /**
@@ -67,29 +74,29 @@ function parseScript(scriptText: string): { hook: string[], body: string[], cta:
 
 /**
  * Format a line with proper styling based on type (VISUAL vs SAY)
- * IMPROVED: Cleaner design, better contrast, no neon colors
+ * ALIGNED: Matches copy link webpage styling exactly
  */
 function formatLine(visual: string | null, say: string | null, isLast: boolean = false): string {
   const borderStyle = isLast ? '' : `border-bottom: 1px solid ${COLORS.divider};`;
   
   // Generic text fallback
   if (!visual?.match(/🎬|VISUAL:/i) && !say?.match(/💬|SAY:/i) && visual) {
-    return `<div style="display: flex; padding: 24px; ${borderStyle} color: ${COLORS.textDim}; font-size: 15px; line-height: 1.6;">${escapeHtml(visual)}</div>`;
+    return `<div style="display: flex; padding: 28px; ${borderStyle} color: ${COLORS.textDim}; font-size: 14px; line-height: 2;">${escapeHtml(visual)}</div>`;
   }
 
-  return `<div style="display: flex; align-items: stretch; gap: 0; padding: 24px 0; ${borderStyle}">
+  return `<div style="display: flex; align-items: stretch; gap: 0; padding: 32px 0; ${borderStyle}">
     <!-- Visual Side (40%) -->
-    <div style="display: flex; flex-direction: column; width: 400px; padding-right: 32px; border-right: 1px solid ${COLORS.divider};">
-      <div style="display: flex; font-size: 9px; font-weight: 700; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">VISUAL</div>
-      <div style="display: flex; font-size: 14px; color: ${COLORS.textDim}; line-height: 1.7; font-style: italic; opacity: 0.9;">${visual ? escapeHtml(visual.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '')) : '—'}</div>
+    <div style="display: flex; flex-direction: column; width: 400px; padding-right: 36px; border-right: 2px solid ${COLORS.divider};">
+      <div style="display: flex; font-size: 10px; font-weight: 800; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 2.5px; margin-bottom: 12px;">🎬 VISUAL</div>
+      <div style="display: flex; font-size: 14px; color: ${COLORS.textDim}; line-height: 2; font-style: italic;">${visual ? escapeHtml(visual.replace(/^🎬\s*VISUAL:\s*/i, '').replace(/^VISUAL:\s*/i, '')) : '—'}</div>
     </div>
     
     <!-- Dialogue Side (60%) -->
-    <div style="display: flex; flex-direction: column; flex: 1; padding-left: 40px; background: ${say ? COLORS.sayGlow : 'transparent'};">
-      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
-        <span style="display: flex; font-size: 9px; font-weight: 800; color: ${COLORS.accent}; text-transform: uppercase; letter-spacing: 3px;">DIALOGUE</span>
+    <div style="display: flex; flex-direction: column; flex: 1; padding-left: 44px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+        <span style="display: flex; font-size: 10px; font-weight: 900; color: ${COLORS.accent}; text-transform: uppercase; letter-spacing: 3.5px;">💬 DIALOGUE</span>
       </div>
-      <div style="display: flex; font-size: 22px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.4; letter-spacing: -0.4px;">${say ? escapeHtml(say.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '')) : '—'}</div>
+      <div style="display: flex; font-size: 24px; font-weight: 600; color: ${COLORS.textMain}; line-height: 1.45; letter-spacing: -0.5px;">${say ? escapeHtml(say.replace(/^💬\s*SAY:\s*/i, '').replace(/^SAY:\s*/i, '')) : '—'}</div>
     </div>
   </div>`;
 }
@@ -104,12 +111,11 @@ function escapeHtml(text: string): string {
 }
 
 /**
- * Create section header HTML (clean, no emojis, uppercase)
+ * Create section header HTML matching webpage style
  */
 function createSectionHeader(title: string): string {
-  return `<div style="display: flex; align-items: center; margin-bottom: 24px; gap: 16px;">
-    <div style="display: flex; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 4px; color: ${COLORS.textMuted};">${title}</div>
-    <div style="display: flex; flex: 1; height: 1px; background: ${COLORS.divider};"></div>
+  return `<div style="display: flex; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid ${COLORS.divider};">
+    <div style="display: flex; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 4px; color: ${COLORS.accent};">${title}</div>
   </div>`;
 }
 
@@ -155,23 +161,22 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     const ctaHtml = formatSection(sections.cta);
 
     const template = html(`
-      <div style="display: flex; flex-direction: column; width: 1080px; padding: 64px; font-family: 'Poppins'; background: ${COLORS.bgDark}; color: ${COLORS.textMain};">
+      <div style="display: flex; flex-direction: column; width: 1080px; padding: 64px; font-family: 'Poppins'; background: linear-gradient(180deg, ${COLORS.bgGradientStart} 0%, ${COLORS.bgGradientEnd} 100%); color: ${COLORS.textMain};">
         
-        <!-- Minimalist Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 48px; border-bottom: 1px solid ${COLORS.divider}; padding-bottom: 32px;">
+        <!-- Header matching webpage -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 48px; border-bottom: 2px solid ${COLORS.dividerStrong}; padding-bottom: 24px;">
           <div style="display: flex; flex-direction: column;">
-            <div style="display: flex; font-size: 32px; font-weight: 800; color: ${COLORS.textMain}; letter-spacing: -1.5px;">SCRIPT<span style="color: ${COLORS.accent};">FLOW</span></div>
-            <div style="display: flex; font-size: 11px; color: ${COLORS.textMuted}; font-weight: 600; text-transform: uppercase; letter-spacing: 5px; margin-top: 4px;">Studio Blueprint</div>
+            <div style="display: flex; font-size: 32px; font-weight: 900; color: ${COLORS.textMain}; letter-spacing: -1.2px;">SCRIPT<span style="color: ${COLORS.accent}; text-shadow: 0 0 20px ${COLORS.accentGlow};">FLOW</span></div>
+            <div style="display: flex; font-size: 10px; color: ${COLORS.textMuted}; font-weight: 700; text-transform: uppercase; letter-spacing: 3px; margin-top: 6px;">Studio Blueprint</div>
           </div>
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div style="display: flex; font-size: 10px; font-weight: 700; color: ${COLORS.textMuted}; letter-spacing: 2px;">V2.5.0</div>
-            <div style="display: flex; width: 6px; height: 6px; border-radius: 50%; background: ${COLORS.accent};"></div>
+          <div style="display: flex; align-items: center; background: ${COLORS.accentBg}; border: 1px solid ${COLORS.accentBorder}; padding: 8px 16px; border-radius: 8px;">
+            <div style="display: flex; font-size: 11px; font-weight: 800; color: ${COLORS.accent}; letter-spacing: 2px;">✦ V2.5.0</div>
           </div>
         </div>
 
-        <!-- Compact Content Sections -->
+        <!-- Content Sections matching webpage cards -->
         ${hookHtml ? `
-        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 32px;">
+        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px ${COLORS.cardShadow};">
           ${createSectionHeader('01 / HOOK')}
           <div style="display: flex; flex-direction: column;">
             ${hookHtml}
@@ -179,28 +184,24 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
         </div>` : ''}
 
         ${bodyHtml ? `
-        <div style="display: flex; flex-direction: column; margin-bottom: 40px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 32px;">
-          ${createSectionHeader('02 / SCENE BREAKDOWN')}
+        <div style="display: flex; flex-direction: column; margin-bottom: 32px; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px ${COLORS.cardShadow};">
+          ${createSectionHeader('02 / BODY')}
           <div style="display: flex; flex-direction: column;">
             ${bodyHtml}
           </div>
         </div>` : ''}
 
         ${ctaHtml ? `
-        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 32px;">
+        <div style="display: flex; flex-direction: column; background: ${COLORS.cardBg}; border: 1px solid ${COLORS.cardBorder}; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px ${COLORS.cardShadow};">
           ${createSectionHeader('03 / CALL TO ACTION')}
           <div style="display: flex; flex-direction: column;">
             ${ctaHtml}
           </div>
         </div>` : ''}
 
-        <!-- Attractive Footer -->
-        <div style="display: flex; justify-content: center; margin-top: 56px;">
-          <div style="display: flex; align-items: center; gap: 16px; opacity: 0.2;">
-            <div style="display: flex; height: 1px; width: 40px; background: ${COLORS.textMuted};"></div>
-            <div style="display: flex; font-size: 11px; font-weight: 600; color: ${COLORS.textMuted}; letter-spacing: 6px;">PRODUCTION BLUEPRINT V2.5.2 INT-HINT</div>
-            <div style="display: flex; height: 1px; width: 40px; background: ${COLORS.textMuted};"></div>
-          </div>
+        <!-- Footer matching webpage -->
+        <div style="display: flex; justify-content: center; margin-top: 48px;">
+          <div style="display: flex; font-size: 11px; font-weight: 600; color: ${COLORS.textMuted}; letter-spacing: 2px; opacity: 0.5;">POWERED BY SCRIPTFLOW AI</div>
         </div>
 
       </div>
@@ -245,27 +246,36 @@ export async function generateScriptImage(scriptText: string): Promise<string> {
     const generationTime = Date.now() - startTime;
     logger.info(`Image generated in ${generationTime}ms (Satori)`);
 
-    // Upload to ImgBB
-    const formData = new FormData();
-    formData.append('image', pngBuffer, { filename: 'script.png' });
-
-    const uploadResponse = await axios.post(
-      `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders(),
-        },
-        timeout: 30000  // 30 second timeout
-      }
-    );
-
-    if (uploadResponse.data && uploadResponse.data.data && uploadResponse.data.data.url) {
-      const imageUrl = uploadResponse.data.data.url;
-      logger.info(`Image uploaded to ImgBB: ${imageUrl}`);
+    // Provider switching logic
+    if (config.IMAGE_PROVIDER === 's3') {
+      // Import dynamically to avoid require errors if module is missing? 
+      // Better to import at top, but for now assuming user installs deps.
+      const { uploadToS3 } = require('../services/s3Service');
+      const imageUrl = await uploadToS3(pngBuffer, 'script.png');
       return imageUrl;
     } else {
-      throw new Error('ImgBB response did not contain URL');
+      // Fallback to ImgBB (Legacy)
+      const formData = new FormData();
+      formData.append('image', pngBuffer, { filename: 'script.png' });
+
+      const uploadResponse = await axios.post(
+        `https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`,
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+          },
+          timeout: 30000 
+        }
+      );
+
+      if (uploadResponse.data && uploadResponse.data.data && uploadResponse.data.data.url) {
+        const imageUrl = uploadResponse.data.data.url;
+        logger.info(`Image uploaded to ImgBB: ${imageUrl}`);
+        return imageUrl;
+      } else {
+        throw new Error('ImgBB response did not contain URL');
+      }
     }
 
   } catch (error: any) {

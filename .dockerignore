@@ -17,6 +17,9 @@ dist
 temp
 data
 coverage
+*_output.txt
+logs.txt
+src/test-dynamic-height.ts
 
 # IDE settings
 .vscode
@@ -33,3 +36,4 @@ docs
 tests
 *.test.ts
 *.spec.ts
+scripts/
